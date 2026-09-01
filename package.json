@@ -11,6 +11,7 @@
     "dev": "pnpm --parallel --filter @war2/client --filter @war2/server dev",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
-    "build": "pnpm -r --if-present build"
+    "build": "pnpm -r --if-present build",
+    "gate": "node scripts/war-gate.mjs"
   }
 }
