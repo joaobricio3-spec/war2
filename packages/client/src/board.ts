@@ -150,7 +150,9 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   const fitWorld = () => {
     const sx = app.screen.width / WORLD.width;
     const sy = app.screen.height / WORLD.height;
-    const s = Math.max(sx, sy);
+    // Contain (min) so all 42 territories stay on-screen; cover cropped the
+    // Americas off a tall board and hid the stack the player just placed.
+    const s = Math.min(sx, sy);
     world.scale.set(s);
     baseX = (app.screen.width - WORLD.width * s) / 2;
     baseY = (app.screen.height - WORLD.height * s) / 2;

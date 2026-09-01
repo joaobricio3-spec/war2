@@ -588,7 +588,7 @@ async function main() {
     e.preventDefault();
     const me = mode === "net" ? netId : mode === "campaign" ? humanId : state.currentPlayerId;
     const dests = legalTargets(state, me);
-    const id = selected && dests.has(selected) ? selected : dests.values().next().value;
+    const id = selected && dests.has(selected) ? selected : null;
     if (id) dispatch({ type: "place", playerId: me, territoryId: id, count: 1 });
   });
 
