@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "war2-imagine": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/tools/mcp-imagine/dist/index.js"],
+      "env": {
+        "XAI_API_KEY": "${env:XAI_API_KEY}",
+        "HF_API_KEY_ID": "${env:HF_API_KEY_ID}",
+        "HF_API_KEY_SECRET": "${env:HF_API_KEY_SECRET}"
+      },
+      "envFile": "${workspaceFolder}/tools/mcp-imagine/.env"
+    }
+  }
+}

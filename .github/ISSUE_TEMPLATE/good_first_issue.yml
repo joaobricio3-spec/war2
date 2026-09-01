@@ -1,0 +1,16 @@
+name: Good first issue
+description: Fatia pequena para quem está chegando.
+title: "[good first issue] "
+labels: ["good first issue"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Tarefa
+      description: Um arquivo de teste + um módulo. Cabe num PR de uma tarde.
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Arquivos

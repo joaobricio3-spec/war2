@@ -1,0 +1,20 @@
+{
+  "name": "@war2/client",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@war2/engine": "workspace:*",
+    "@war2/shared": "workspace:*",
+    "pixi.js": "^8.7.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0"
+  }
+}

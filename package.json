@@ -1,0 +1,16 @@
+{
+  "name": "war2",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Motor open source de conquista territorial (regras clássicas de tabuleiro) + cliente web sem cap de FPS e salas entre amigos.",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @war2/client --filter @war2/server dev",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "build": "pnpm -r --if-present build"
+  }
+}

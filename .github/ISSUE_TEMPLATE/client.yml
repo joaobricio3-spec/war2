@@ -1,0 +1,20 @@
+name: Client
+description: Mapa Pixi, UI HTML, hotseat, FPS.
+title: "[client] "
+labels: ["client"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: O que muda na tela
+    validations:
+      required: true
+  - type: checkboxes
+    id: fps
+    attributes:
+      label: FPS
+      options:
+        - label: Não introduz cap de ticker / targetFPS
+          required: true
+        - label: Ticker não chama reduce
+          required: true

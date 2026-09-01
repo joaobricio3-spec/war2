@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>War2</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside class="panel">
+        <p class="eyebrow">war2 · tabuleiro aberto</p>
+        <h1>Mesa</h1>
+        <p id="fps" class="fps">— fps</p>
+        <dl>
+          <dt>fase</dt>
+          <dd id="phase">—</dd>
+          <dt>vez</dt>
+          <dd id="turn">—</dd>
+          <dt>objetivo</dt>
+          <dd id="objective">—</dd>
+          <dt>reforço</dt>
+          <dd id="pending">—</dd>
+        </dl>
+        <div id="cards" class="cards"></div>
+        <div class="row">
+          <button type="button" id="trade">Trocar 3 cartas</button>
+          <button type="button" id="end" class="primary">Encerrar fase</button>
+        </div>
+        <p id="error" class="error"></p>
+        <p class="help">
+          Setup e reforço: clique num território seu. Ataque e deslocamento: origem e depois destino.
+          Roda do mouse = zoom. Arraste o mapa. Encerrar fase passa reforço → ataques → próximo turno.
+        </p>
+        <div id="log" class="log"></div>
+      </aside>
+      <div id="board"></div>
+    </div>
+
+    <div id="overlay">
+      <div class="sheet">
+        <h2>Sentar à mesa</h2>
+        <p>Mesmo PC, ou uma sala com código de seis caracteres. Sem ranking, sem energia.</p>
+        <label>
+          Jogadores hotseat
+          <select id="nplayers">
+            <option>2</option>
+            <option selected>3</option>
+            <option>4</option>
+            <option>5</option>
+            <option>6</option>
+          </select>
+        </label>
+        <button type="button" id="hotseat" class="primary">Jogar no mesmo PC</button>
+        <hr />
+        <label>Apelido <input id="nick" placeholder="General" /></label>
+        <label>WebSocket <input id="ws" value="ws://localhost:8787/ws" /></label>
+        <label>Código <input id="code" placeholder="ABC123" maxlength="6" /></label>
+        <div class="row">
+          <button type="button" id="create">Criar sala</button>
+          <button type="button" id="join">Entrar</button>
+          <button type="button" id="startnet">Iniciar partida</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

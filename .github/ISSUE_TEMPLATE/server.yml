@@ -1,0 +1,18 @@
+name: Server
+description: Salas, código, reconexão, autoridade.
+title: "[server] "
+labels: ["server"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Protocolo / comportamento
+    validations:
+      required: true
+  - type: checkboxes
+    id: engine
+    attributes:
+      label: Contrato
+      options:
+        - label: Continua usando o mesmo reduce do engine
+          required: true

@@ -1,0 +1,26 @@
+{
+  "name": "@war2/mcp-imagine",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MCP local: gera imagens via xAI Imagine API e Higgsfield REST, grava em disco.",
+  "type": "module",
+  "bin": {
+    "war2-imagine": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "prepare": "tsc"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "typescript": "^5.7.3"
+  }
+}

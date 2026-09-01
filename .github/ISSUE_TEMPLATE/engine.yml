@@ -1,0 +1,24 @@
+name: Engine
+description: Mudança no motor de regras (combate, cartas, objetivos, mapa).
+title: "[engine] "
+labels: ["engine"]
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Comportamento
+      description: O que o reduce deve passar a fazer (ou o bug atual).
+    validations:
+      required: true
+  - type: textarea
+    id: test
+    attributes:
+      label: Teste
+      description: Nome do teste Vitest que deve falhar e depois passar.
+    validations:
+      required: true
+  - type: textarea
+    id: rules
+    attributes:
+      label: Seção em docs/rules
+      description: classic.md / edge-cases.md
