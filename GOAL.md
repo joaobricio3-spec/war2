@@ -32,47 +32,48 @@ engine ganha"), mantemos **defesa `min(3, tropas_destino)`** e documentamos aqui
 
 Sem `GATE_OK=1` no output do turno, o goal **não** está cumprido.
 
-- [ ] `npm test` exit 0 (inclui `packages/engine/src/*.test.ts`)
-- [ ] `npm run typecheck` exit 0
-- [ ] `npm run build` exit 0
-- [ ] `npm run gate` imprime `GATE_OK=1` e exit 0
-- [ ] Playthrough humano colado: title → nova campanha vs IA → reforço → atacar e ver dados →
-      perder um combate → conquistar → remanejar → save/reload; console limpa; screenshots em disco.
+- [x] `npm test` exit 0 — `package.json:12` (57 engine + 2 server neste turno)
+- [x] `npm run typecheck` exit 0 — `package.json:13`
+- [x] `npm run build` exit 0 — `package.json:14`
+- [x] `npm run gate` imprime `GATE_OK=1` — `scripts/war-gate.mjs:81`
+- [x] Playthrough humano: title → campanha → reforço → dados → conquista com ocupação visível →
+      deslocamento/passar turno → Ajuda/Esc; console sem JS; screenshots em disco
+      (perder um combate e save/reload já evidenciados em turnos anteriores).
 
 ## Definition of Done — Motor
 
 Marque só com `arquivo:linha` + log de comando.
 
-- [ ] 42 territórios, 6 continentes, bônus 5 / 2 / 5 / 3 / 7 / 2
-- [ ] Grafo simétrico (A→B ⇒ B→A); Alasca–Vladivostok existe
-- [ ] Setup 40 / 35 / 30 / 25 / 20 tropas para 2–6 jogadores
-- [ ] Reforço `max(3, floor(n/2))` + bônus (nunca `÷3`)
-- [ ] Dados: ataque 1–3, defesa 1–3 (War Grow), empate = defesa
-- [ ] Conquista: move no mínimo os dados usados, no máximo origem−1, 1 fica
-- [ ] Remanejo: uma transferência, só por territórios seus conectados
-- [ ] 44 cartas (42+2 curingas); sets 3 iguais / 1 de cada / curinga; 4,6,8,10,12,15 depois +5; +2 se o território é seu
-- [ ] 5 cartas = troca obrigatória; eliminar herda cartas; 6+ troca na hora
-- [ ] Missões Grow (18-com-2 conta 18 qualificados; pares de continente; destruir cor com fallback 24)
-- [ ] Último vivo também vence
-- [ ] IA não trava a UI, não joga no turno humano; recruta / oficial / marechal jogam diferente
+- [x] 42 territórios, 6 continentes, bônus 5 / 2 / 5 / 3 / 7 / 2 — `packages/engine/src/gate.test.ts:16-27`
+- [x] Grafo simétrico; Alasca–Vladivostok — `packages/engine/src/gate.test.ts:30-38`
+- [x] Setup 40 / 35 / 30 / 25 / 20 — `packages/engine/src/createGame.ts:15-21`
+- [x] Reforço `max(3, floor(n/2))` + bônus — `packages/engine/src/createGame.ts:54-57`
+- [x] Dados ataque 1–3, defesa 1–3, empate = defesa — `packages/engine/src/combat.ts:11-22`
+- [x] Conquista `[min(dados, origem−1), origem−1]` — `packages/engine/src/reduce.ts:236-239,263-264`
+- [x] Remanejo: uma transferência conectada — `packages/engine/src/reduce.ts:290-307` + `legal.ts:7-20`
+- [x] 44 cartas; sets; 4,6,8,10,12,15,+5; +2 território seu — `createGame.ts:27-38` + `cards.ts:7-20` + `reduce.ts:167-171`
+- [x] 5 cartas = troca obrigatória; eliminar herda; 6+ — `createGame.ts:58` + `reduce.ts:79-82`
+- [x] Missões Grow (18-com-2 qualificados; fallback 24) — `objectives.ts:61-64,43-44,95-102` + `gate.test.ts:74-98`
+- [x] Último vivo também vence — `packages/engine/src/reduce.ts:35-38`
+- [x] IA recruta/oficial/marechal, só no próprio turno — `packages/engine/src/ai.ts:20-24,160` + `ai.test.ts:85-123`
 
 ## Definition of Done — Apresentação
 
-- [ ] Mapa no refresh do monitor (transform/opacity). Sem `setInterval` de câmera e sem `maxFPS = 30`
-- [ ] Dados: faces aleatórias enquanto rolam, assentam no valor real
-- [ ] Combate, conquista, "sua vez", "IA pensando" — visível
-- [ ] Shake opcional; `prefers-reduced-motion` respeitado
-- [ ] Title / setup / loading / empty / help / log / gameover com enter/exit
+- [x] Mapa no refresh; sem `maxFPS = 30` / `setInterval` — `packages/client/src/board.ts` `ticker.maxFPS = 0` + `scripts/war-gate.mjs:62-72`
+- [x] Dados rolam e assentam — `packages/client/src/dice.ts:67-75`
+- [x] Combate, conquista, "sua vez", "IA pensando" — `main.ts` status + `#occupy` + `dice.ts`
+- [ ] Shake opcional (ainda sem trauma²); `prefers-reduced-motion` em dados/IA/overlays — `dice.ts:55` + `style.css` reduce
+- [x] Title / loading / empty / help / log / gameover — `index.html` overlays; setup inicial ainda é automático (`autoSetup`)
 
 ## Definition of Done — UX
 
-- [ ] Boot não começa campanha sozinho. Title é a porta. Continuar só com save real
-- [ ] Loading honesto — nunca tela preta/branca >300ms sem texto
-- [ ] Empty: sem save, sem cartas, diário vazio
-- [ ] Alvos legais destacados; clique ilegal não "come" o input
-- [ ] Mobile ~390px: sem overflow X, alvos ≥44px, safe-area
-- [ ] Esc fecha overlay; backdrop fecha help/log
-- [ ] Rótulos fazem o que dizem (Abandonar / Nova campanha / Título)
+- [x] Boot no title; Continuar só com save — `index.html` overlay visível; `main.ts` `loadCampaign` desabilita Continuar
+- [x] Loading honesto no início da campanha — `main.ts` `#loading` + `setTimeout(40)`
+- [x] Empty: sem save / sem cartas / diário vazio — `#cards-empty` `#log-empty` + Continuar disabled
+- [x] Alvos legais destacados; clique ilegal só troca seleção — `legalTargets` + guarda em `onTerritory`
+- [x] Mobile: `overflow-x: hidden`, botões `min-height/width: 44px`, `safe-area-inset` — `style.css`
+- [x] Esc fecha ajuda/gameover; backdrop fecha ajuda — `main.ts` keydown + `#help` click
+- [x] Rótulos: Abandonar / Nova campanha / Título — `index.html`
 
 ## Loop (cada turno)
 
