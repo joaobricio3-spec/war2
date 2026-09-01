@@ -15,6 +15,7 @@ coverage
 !.vscode/extensions.json
 *.log
 .pnpm-store
+scripts/__pycache__/
 .worktrees
 worktrees
 tools/mcp-imagine/out/
