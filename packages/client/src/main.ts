@@ -163,16 +163,26 @@ async function main() {
     cancelDice = showBattle(ui.dice, state.lastBattle);
   }
 
+  function legalTargets(s: GameState, me: PlayerId): Set<TerritoryId> {
+    const out = new Set<TerritoryId>();
+    if (!selected || s.currentPlayerId !== me) return out;
+    if (s.phase !== "attack" && s.phase !== "fortify") return out;
+    for (const a of listLegalActions(s, me)) {
+      if ((a.type === "attack" || a.type === "fortify") && a.from === selected) out.add(a.to);
+    }
+    return out;
+  }
+
   function paint() {
     if (!state) return;
     const me =
       mode === "net"
         ? netId || state.currentPlayerId
-        : mode === "campaign"
-          ? humanId
-          : state.currentPlayerId;
+          : mode === "campaign"
+            ? humanId
+            : state.currentPlayerId;
     viewer = me;
-    board.render(state, selected, me);
+    board.render(state, selected, me, legalTargets(state, me));
     const p = state.players.find((pl) => pl.id === me);
     ui.phase.textContent = state.phase;
     ui.turn.textContent = `${p?.nickname ?? me} (${p?.color ?? ""})`;

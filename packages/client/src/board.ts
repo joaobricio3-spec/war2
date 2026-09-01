@@ -161,7 +161,12 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     { passive: false },
   );
 
-  function render(state: GameState, selected: TerritoryId | null, viewer: PlayerId) {
+  function render(
+    state: GameState,
+    selected: TerritoryId | null,
+    viewer: PlayerId,
+    highlights?: ReadonlySet<TerritoryId>,
+  ) {
     for (const l of LAYOUT) {
       const occ = state.territories[l.id];
       const owner = state.players.find((p) => p.id === occ.ownerId);
@@ -169,23 +174,28 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
       const cell = cells.get(l.id)!;
       const mine = occ.ownerId === viewer;
       const on = selected === l.id;
+      const target = highlights?.has(l.id) ?? false;
 
       cell.glow.clear();
       cell.glow.ellipse(l.cx, l.cy, l.rx, l.ry);
-      cell.glow.fill({ color, alpha: on ? 0.28 : mine ? 0.16 : 0.1 });
+      cell.glow.fill({ color, alpha: on ? 0.28 : target ? 0.24 : mine ? 0.16 : 0.1 });
       cell.glow.ellipse(l.cx, l.cy, l.rx, l.ry);
       cell.glow.stroke({
-        width: on ? 2.4 : 1.2,
-        color: on ? 0xf0c987 : color,
-        alpha: on ? 0.95 : 0.45,
+        width: on ? 2.4 : target ? 2.4 : 1.2,
+        color: on ? 0xf0c987 : target ? 0xf0c987 : color,
+        alpha: on ? 0.95 : target ? 0.85 : 0.45,
       });
+      if (target) {
+        cell.glow.ellipse(l.cx, l.cy, l.rx + 5, l.ry + 5);
+        cell.glow.stroke({ width: 1.5, color: 0xf0c987, alpha: 0.55 });
+      }
 
       cell.disc.clear();
       cell.disc.circle(l.cx, l.cy, 15);
       cell.disc.fill({ color: 0x090b0e, alpha: 0.92 });
       cell.disc.stroke({ width: 2.5, color, alpha: 1 });
       cell.count.text = String(occ.armies);
-      cell.name.alpha = on ? 1 : 0.62;
+      cell.name.alpha = on || target ? 1 : 0.62;
     }
   }
 
