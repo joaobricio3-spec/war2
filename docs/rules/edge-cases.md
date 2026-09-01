@@ -43,9 +43,9 @@ Complemento de `classic.md`. Cada item tem (ou deve ter) teste em `@war2/engine`
 
 ## Deslocamento
 
-- Mover 5 do Brasil à Venezuela e, no mesmo turno, esses 5 da Venezuela ao México: **ilegal**.
-- Exércitos que **já estavam** na Venezuela podem ir ao México no mesmo turno.
-- Modelo: cada território acumula `arrivedThisTurn`; só `armies - 1 - arrivedThisTurn` pode sair.
+- **Uma** transferência (`fortify`) por turno; a segunda falha (`fortifiedThisTurn`).
+- Origem e destino próprios devem estar ligados por uma cadeia de territórios seus (não só adjacentes). Brasil → México é legal se a Venezuela no meio for sua; ilegal se o caminho estiver cortado.
+- Sempre resta ≥1 na origem.
 
 ## Setup
 

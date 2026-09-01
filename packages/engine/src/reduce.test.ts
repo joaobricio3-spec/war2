@@ -7,7 +7,7 @@ import { listLegalActions } from "./legal.ts";
 import { pendingPlaceTotal } from "./cards.ts";
 import type { GameState } from "./types.ts";
 import type { TerritoryId } from "./map/classic.ts";
-import { areNeighbors } from "./map/classic.ts";
+import { areNeighbors, TERRITORY_IDS } from "./map/classic.ts";
 
 const rng = createSeededRng(7);
 
@@ -221,14 +221,24 @@ describe("reduce", () => {
     expect(occMax.state.territories.brasil.armies).toBe(1);
   });
 
-  it("blocks chaining the same armies through two borders in one fortify", () => {
+  it("allows exactly one connected-path fortify per turn", () => {
     let s = dumpAll(finishSetup(game()));
     const me = s.currentPlayerId;
+    const other = s.playerOrder.find((id) => id !== me)!;
     s = cloneState(s);
     s.phase = "fortify";
+    s.fortifiedThisTurn = false;
+    for (const id of TERRITORY_IDS) {
+      s.territories[id] = { ownerId: other, armies: 1 };
+    }
     s.territories.brasil = { ownerId: me, armies: 5 };
     s.territories.venezuela = { ownerId: me, armies: 1 };
     s.territories.mexico = { ownerId: me, armies: 1 };
+    s.territories.japao = { ownerId: me, armies: 1 };
+    expect(areNeighbors("brasil", "venezuela")).toBe(true);
+    expect(areNeighbors("venezuela", "mexico")).toBe(true);
+    expect(areNeighbors("brasil", "mexico")).toBe(false);
+
     const r1 = reduce(
       s,
       { type: "fortify", playerId: me, from: "brasil", to: "venezuela", armies: 4 },
@@ -236,38 +246,38 @@ describe("reduce", () => {
     );
     expect(r1.ok).toBe(true);
     if (!r1.ok) return;
+    expect(r1.state.fortifiedThisTurn).toBe(true);
+    expect(r1.state.territories.brasil.armies).toBe(1);
+    expect(r1.state.territories.venezuela.armies).toBe(5);
+
     const r2 = reduce(
       r1.state,
-      { type: "fortify", playerId: me, from: "venezuela", to: "mexico", armies: 4 },
+      { type: "fortify", playerId: me, from: "venezuela", to: "mexico", armies: 1 },
       rng,
     );
     expect(r2.ok).toBe(false);
-    const r3 = reduce(
-      r1.state,
-      { type: "fortify", playerId: me, from: "venezuela", to: "mexico", armies: 1 },
-      rng,
-    );
-    expect(r3.ok).toBe(false);
+    if (!r2.ok) expect(r2.error).toBe("só um deslocamento por turno");
 
-    const parked = cloneState(s);
-    parked.territories.venezuela = { ownerId: me, armies: 3 };
-    const moveIn = reduce(
-      parked,
-      { type: "fortify", playerId: me, from: "brasil", to: "venezuela", armies: 4 },
+    const hop = cloneState(s);
+    const r3 = reduce(
+      hop,
+      { type: "fortify", playerId: me, from: "brasil", to: "mexico", armies: 4 },
       rng,
     );
-    expect(moveIn.ok).toBe(true);
-    if (!moveIn.ok) return;
-    const onward = reduce(
-      moveIn.state,
-      { type: "fortify", playerId: me, from: "venezuela", to: "mexico", armies: 1 },
+    expect(r3.ok).toBe(true);
+    if (!r3.ok) return;
+    expect(r3.state.territories.brasil.armies).toBe(1);
+    expect(r3.state.territories.mexico.armies).toBe(5);
+    expect(r3.state.fortifiedThisTurn).toBe(true);
+
+    const isolated = cloneState(s);
+    const r4 = reduce(
+      isolated,
+      { type: "fortify", playerId: me, from: "brasil", to: "japao", armies: 1 },
       rng,
     );
-    expect(onward.ok).toBe(true);
-    if (onward.ok) {
-      expect(onward.state.territories.mexico.armies).toBe(2);
-      expect(onward.state.territories.venezuela.armies).toBe(6);
-    }
+    expect(r4.ok).toBe(false);
+    if (!r4.ok) expect(r4.error).toBe("sem caminho por territórios seus");
   });
 
   it("plays random legal moves without crashing (smoke)", () => {

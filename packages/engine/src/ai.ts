@@ -133,8 +133,7 @@ function bestFortify(
 ): { from: TerritoryId; to: TerritoryId; armies: number } | null {
   let best: { from: TerritoryId; to: TerritoryId; armies: number; gain: number } | null = null;
   for (const from of ownedIds(state, playerId)) {
-    const arrived = state.arrivedThisTurn[from] ?? 0;
-    const movable = state.territories[from].armies - 1 - arrived;
+    const movable = state.territories[from].armies - 1;
     if (movable < 1) continue;
     if (isBorder(state, playerId, from)) continue; // keep border garrisons in place
     for (const to of neighborsOf(from)) {

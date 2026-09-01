@@ -158,13 +158,8 @@ async function main() {
         }
       } else if (state.phase === "fortify") {
         const from = selected;
-        const armies = Math.max(
-          1,
-          state.territories[from].armies - 1 - (state.arrivedThisTurn[from] ?? 0),
-        );
-        if (armies >= 1) {
-          dispatch({ type: "fortify", playerId: me, from, to: id, armies: Math.min(armies, 3) });
-        }
+        const armies = state.territories[from].armies - 1;
+        if (armies >= 1) dispatch({ type: "fortify", playerId: me, from, to: id, armies });
       }
       selected = id;
     },

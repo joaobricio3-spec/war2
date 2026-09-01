@@ -54,9 +54,8 @@ Nesta ordem:
 
 ### Deslocamento
 
-- Só entre territórios **próprios e contíguos**.
-- Sempre resta ≥1 de ocupação.
-- Cada exército desloca-se **no máximo uma vez** no turno (não encadear o mesmo efetivo Brasil → Venezuela → México).
+- **Exatamente uma** transferência por turno, entre dois territórios **seus** ligados por um caminho em que **todos** os territórios são seus (não precisa ser adjacente).
+- Sempre resta ≥1 de ocupação na origem.
 
 ### Cartas após conquista
 

@@ -85,7 +85,7 @@ export interface GameState {
   conqueredThisTurn: boolean;
   pendingOccupy: PendingOccupy | null;
   armiesToPlace: ArmiesToPlace;
-  arrivedThisTurn: Partial<Record<import("./map/classic.ts").TerritoryId, number>>;
+  fortifiedThisTurn: boolean;
   mustTrade: boolean;
   lastBattle: LastBattle | null;
   winnerId: PlayerId | null;

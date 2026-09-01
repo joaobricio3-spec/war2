@@ -2,6 +2,7 @@ import { isValidTrade, pendingPlaceTotal, tradeArmies } from "./cards.ts";
 import { cloneState } from "./clone.ts";
 import { attackDiceCount, defendDiceCount, resolveBattle } from "./combat.ts";
 import { beginTurn, drawCard, emptyPending, nextAlive } from "./createGame.ts";
+import { reachableOwn } from "./legal.ts";
 import { areNeighbors, TERRITORY_BY_ID, type TerritoryId } from "./map/classic.ts";
 import {
   convertOrphanDestroyObjectives,
@@ -271,21 +272,24 @@ function fortify(
     return fortify(nextPhase, action);
   }
   if (state.phase !== "fortify") return fail("não é deslocamento");
+  if (state.fortifiedThisTurn) return fail("só um deslocamento por turno");
   if (action.armies < 1) return fail("armies < 1");
-  if (!areNeighbors(action.from, action.to)) return fail("não são vizinhos");
+  if (action.from === action.to) return fail("origem e destino iguais");
   const from = state.territories[action.from];
   const to = state.territories[action.to];
   if (from.ownerId !== action.playerId || to.ownerId !== action.playerId) {
     return fail("só entre territórios próprios");
   }
-  const arrived = state.arrivedThisTurn[action.from] ?? 0;
-  const movable = from.armies - 1 - arrived;
-  if (action.armies > movable) return fail("exército já deslocado ou ocupação");
+  if (!reachableOwn(state, action.from, action.playerId).has(action.to)) {
+    return fail("sem caminho por territórios seus");
+  }
+  const movable = from.armies - 1;
+  if (action.armies > movable) return fail("origem precisa ficar com 1");
 
   const next = cloneState(state);
   next.territories[action.from].armies -= action.armies;
   next.territories[action.to].armies += action.armies;
-  next.arrivedThisTurn[action.to] = (next.arrivedThisTurn[action.to] ?? 0) + action.armies;
+  next.fortifiedThisTurn = true;
   return { ok: true, state: checkWin(next) };
 }
 
