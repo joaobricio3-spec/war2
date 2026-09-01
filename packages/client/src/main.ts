@@ -181,10 +181,20 @@ async function main() {
 
   function legalTargets(s: GameState, me: PlayerId): Set<TerritoryId> {
     const out = new Set<TerritoryId>();
-    if (!selected || s.currentPlayerId !== me) return out;
+    if (s.currentPlayerId !== me) return out;
     if (s.phase !== "attack" && s.phase !== "fortify") return out;
-    for (const a of listLegalActions(s, me)) {
-      if ((a.type === "attack" || a.type === "fortify") && a.from === selected) out.add(a.to);
+    const kind = s.phase === "attack" ? "attack" : "fortify";
+    const legal = listLegalActions(s, me).filter((a) => a.type === kind);
+    if (selected) {
+      // destinations reachable from the selected origin
+      for (const a of legal) {
+        if ((a.type === "attack" || a.type === "fortify") && a.from === selected) out.add(a.to);
+      }
+    } else {
+      // nothing selected yet: light up the valid origins so the move is findable
+      for (const a of legal) {
+        if (a.type === "attack" || a.type === "fortify") out.add(a.from);
+      }
     }
     return out;
   }
