@@ -5,7 +5,7 @@ import {
   type PlayerId,
   type TerritoryId,
 } from "@war2/engine";
-import { LAYOUT, LAYOUT_BY_ID, SEA_LANES, WORLD } from "./layout.ts";
+import { LAYOUT, LAYOUT_BY_ID, SEA_LANES, WORLD, pointInPoly } from "./layout.ts";
 
 const CHIP: Record<string, number> = {
   red: 0xc45c4a,
@@ -15,6 +15,28 @@ const CHIP: Record<string, number> = {
   black: 0x8a847c,
   white: 0xd9d4c8,
 };
+
+const LAND: Record<string, number> = {
+  north_america: 0xc9a24a,
+  south_america: 0x3f8a48,
+  europe: 0x3d6aa0,
+  africa: 0xb86a3a,
+  asia: 0x7a8f3a,
+  oceania: 0x2f7a72,
+};
+
+function mixRgb(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 255;
+  const ag = (a >> 8) & 255;
+  const ab = a & 255;
+  const br = (b >> 16) & 255;
+  const bg = (b >> 8) & 255;
+  const bb = b & 255;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return (r << 16) | (g << 8) | bl;
+}
 
 type Cell = {
   glow: Graphics;
@@ -39,7 +61,7 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   app.ticker.maxFPS = 0;
   host.appendChild(app.canvas);
 
-  const mapTex = await Assets.load<Texture>("/assets/world-relief.jpg");
+  const mapTex = await Assets.load<Texture>("/assets/world-board.jpg");
 
   const world = new Container();
   app.stage.addChild(world);
@@ -47,6 +69,7 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   const relief = new Sprite(mapTex);
   relief.width = WORLD.width;
   relief.height = WORLD.height;
+  relief.alpha = 0.55;
   relief.eventMode = "none";
   world.addChild(relief);
 
@@ -60,7 +83,7 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     lanes.moveTo(pa.cx, pa.cy);
     lanes.quadraticCurveTo(mx, my, pb.cx, pb.cy);
   }
-  lanes.stroke({ width: 1.25, color: 0x6a8aaa, alpha: 0.35 });
+  lanes.stroke({ width: 2, color: 0xc4a35a, alpha: 0.55 });
 
   const cells = new Map<TerritoryId, Cell>();
   let panned = false;
@@ -71,9 +94,7 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     cell.cursor = "pointer";
     cell.hitArea = {
       contains(x: number, y: number) {
-        const dx = (x - l.cx) / l.rx;
-        const dy = (y - l.cy) / l.ry;
-        return dx * dx + dy * dy <= 1;
+        return pointInPoly(x, y, l.poly);
       },
     };
     cell.on("pointertap", () => {
@@ -115,10 +136,9 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   }
 
   const fitWorld = () => {
-    const pad = 16;
-    const sx = (app.screen.width - pad * 2) / WORLD.width;
-    const sy = (app.screen.height - pad * 2) / WORLD.height;
-    const s = Math.min(sx, sy, 1.35);
+    const sx = app.screen.width / WORLD.width;
+    const sy = app.screen.height / WORLD.height;
+    const s = Math.max(sx, sy);
     world.scale.set(s);
     world.position.set(
       (app.screen.width - WORLD.width * s) / 2,
@@ -171,24 +191,22 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
       const occ = state.territories[l.id];
       const owner = state.players.find((p) => p.id === occ.ownerId);
       const color = CHIP[owner?.color ?? "white"] ?? 0x888888;
+      const land = LAND[TERRITORY_BY_ID[l.id].continent] ?? color;
+      const fill = mixRgb(land, color, 0.42);
       const cell = cells.get(l.id)!;
       const mine = occ.ownerId === viewer;
       const on = selected === l.id;
       const target = highlights?.has(l.id) ?? false;
 
       cell.glow.clear();
-      cell.glow.ellipse(l.cx, l.cy, l.rx, l.ry);
-      cell.glow.fill({ color, alpha: on ? 0.28 : target ? 0.24 : mine ? 0.16 : 0.1 });
-      cell.glow.ellipse(l.cx, l.cy, l.rx, l.ry);
+      cell.glow.poly(l.poly);
+      cell.glow.fill({ color: fill, alpha: on ? 0.88 : target ? 0.82 : 0.74 });
+      cell.glow.poly(l.poly);
       cell.glow.stroke({
-        width: on ? 2.4 : target ? 2.4 : 1.2,
-        color: on ? 0xf0c987 : target ? 0xf0c987 : color,
-        alpha: on ? 0.95 : target ? 0.85 : 0.45,
+        width: on || target ? 3 : 2,
+        color: on || target ? 0xf0c987 : 0x140c08,
+        alpha: 0.92,
       });
-      if (target) {
-        cell.glow.ellipse(l.cx, l.cy, l.rx + 5, l.ry + 5);
-        cell.glow.stroke({ width: 1.5, color: 0xf0c987, alpha: 0.55 });
-      }
 
       cell.disc.clear();
       cell.disc.circle(l.cx, l.cy, 15);
