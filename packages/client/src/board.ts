@@ -61,7 +61,7 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   app.ticker.maxFPS = 0;
   host.appendChild(app.canvas);
 
-  const mapTex = await Assets.load<Texture>("/assets/world-board.jpg");
+  const mapTex = await Assets.load<Texture>("/assets/world-board-v2.jpg");
 
   const world = new Container();
   app.stage.addChild(world);
