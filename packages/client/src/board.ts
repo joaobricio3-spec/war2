@@ -69,7 +69,7 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   const relief = new Sprite(mapTex);
   relief.width = WORLD.width;
   relief.height = WORLD.height;
-  relief.alpha = 0.55;
+  relief.alpha = 1;
   relief.eventMode = "none";
   world.addChild(relief);
 
@@ -119,7 +119,7 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
       text: TERRITORY_BY_ID[l.id].name,
       style: {
         fontFamily: 'Figtree, Candara, "Segoe UI", sans-serif',
-        fontSize: 10,
+        fontSize: 11,
         fill: 0xd9d4c8,
         align: "center",
         fontWeight: "600",
@@ -226,20 +226,19 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
       const owner = state.players.find((p) => p.id === occ.ownerId);
       const color = CHIP[owner?.color ?? "white"] ?? 0x888888;
       const land = LAND[TERRITORY_BY_ID[l.id].continent] ?? color;
-      const fill = mixRgb(land, color, 0.42);
+      const fill = mixRgb(land, color, 0.55);
       const cell = cells.get(l.id)!;
-      const mine = occ.ownerId === viewer;
       const on = selected === l.id;
       const target = highlights?.has(l.id) ?? false;
 
       cell.glow.clear();
       cell.glow.poly(l.poly);
-      cell.glow.fill({ color: fill, alpha: on ? 0.88 : target ? 0.82 : 0.74 });
+      cell.glow.fill({ color: fill, alpha: on ? 0.46 : target ? 0.34 : 0.16 });
       cell.glow.poly(l.poly);
       cell.glow.stroke({
-        width: on || target ? 3 : 2,
-        color: on || target ? 0xf0c987 : 0x140c08,
-        alpha: 0.92,
+        width: on || target ? 2.5 : 1.4,
+        color: on || target ? 0xf0c987 : 0x1c140c,
+        alpha: on || target ? 0.95 : 0.55,
       });
 
       cell.disc.clear();
