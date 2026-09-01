@@ -1,7 +1,6 @@
 import {
   CONTINENT_BY_ID,
   aiChooseAction,
-  beginTurn,
   createGame,
   createSeededRng,
   effectiveObjective,
@@ -96,7 +95,7 @@ function log(line: string) {
 function describeAction(a: Action): string {
   switch (a.type) {
     case "place":
-      return `reforço +${a.count} em ${a.territoryId}`;
+      return `posicionou +${a.count} em ${a.territoryId}`;
     case "trade":
       return "troca de cartas";
     case "endReinforce":
@@ -144,6 +143,12 @@ async function main() {
       viewer = me;
       if (state.pendingOccupy) return;
       if (state.phase === "setup_place" || state.phase === "reinforce") {
+        const dests = legalTargets(state, me);
+        if (!dests.has(id)) {
+          selected = id;
+          paint();
+          return;
+        }
         dispatch({ type: "place", playerId: me, territoryId: id, count: 1 });
         selected = id;
         return;
@@ -190,12 +195,20 @@ async function main() {
       ui.dice.innerHTML = "";
       return;
     }
+    const hits = state.lastBattle.attackLosses + state.lastBattle.defendLosses;
+    board.shake(0.28 + 0.14 * hits);
     cancelDice = showBattle(ui.dice, state.lastBattle);
   }
 
   function legalTargets(s: GameState, me: PlayerId): Set<TerritoryId> {
     const out = new Set<TerritoryId>();
     if (s.currentPlayerId !== me || s.pendingOccupy) return out;
+    if (s.phase === "setup_place" || s.phase === "reinforce") {
+      for (const a of listLegalActions(s, me)) {
+        if (a.type === "place") out.add(a.territoryId);
+      }
+      return out;
+    }
     if (s.phase !== "attack" && s.phase !== "fortify") return out;
     const kind = s.phase === "attack" ? "attack" : "fortify";
     const legal = listLegalActions(s, me).filter((a) => a.type === kind);
@@ -227,13 +240,19 @@ async function main() {
     ui.phase.textContent = state.phase;
     ui.turn.textContent = `${p?.nickname ?? me} (${p?.color ?? ""})`;
     ui.objective.textContent = describeObjective(state, me);
-    ui.pending.textContent = `pendentes: ${pendingPlaceTotal(state.armiesToPlace)} | troca obrigatória: ${state.mustTrade ? "sim" : "não"}`;
+    ui.pending.textContent =
+      state.phase === "setup_place"
+        ? `setup: restam ${p?.setupRemaining ?? 0} tropas`
+        : `pendentes: ${pendingPlaceTotal(state.armiesToPlace)} | troca obrigatória: ${state.mustTrade ? "sim" : "não"}`;
 
     if (mode === "campaign") {
       ui.status.hidden = false;
       if (state.phase === "over") {
         ui.status.textContent = state.winnerId === humanId ? "Vitória" : "Derrota";
         ui.status.dataset.tone = state.winnerId === humanId ? "win" : "lose";
+      } else if (state.phase === "setup_place" && state.currentPlayerId === humanId) {
+        ui.status.textContent = `Setup — posicione 1 tropa (restam ${p?.setupRemaining ?? 0})`;
+        ui.status.dataset.tone = "you";
       } else if (state.currentPlayerId === humanId) {
         ui.status.textContent = "Sua vez";
         ui.status.dataset.tone = "you";
@@ -261,9 +280,10 @@ async function main() {
 
     const humanTurn =
       mode !== "campaign" || (state.currentPlayerId === humanId && !aiThinking && state.phase !== "over");
-    ui.end.disabled = !humanTurn || !!state.pendingOccupy;
-    ui.trade.disabled = !humanTurn;
-    if (state.phase === "reinforce") ui.end.textContent = "Encerrar reforço";
+    ui.end.disabled = !humanTurn || !!state.pendingOccupy || state.phase === "setup_place";
+    ui.trade.disabled = !humanTurn || state.phase === "setup_place";
+    if (state.phase === "setup_place") ui.end.textContent = "Posicione tropas";
+    else if (state.phase === "reinforce") ui.end.textContent = "Encerrar reforço";
     else if (state.phase === "attack") ui.end.textContent = "Ir ao deslocamento";
     else if (state.phase === "fortify") ui.end.textContent = "Passar o turno";
     else ui.end.textContent = "Encerrar fase";
@@ -356,7 +376,8 @@ async function main() {
     }
     aiThinking = true;
     paint();
-    aiTimer = window.setTimeout(stepAI, reducedMotion ? 8 : 160);
+    const setup = state.phase === "setup_place";
+    aiTimer = window.setTimeout(stepAI, reducedMotion ? 8 : setup ? 36 : 160);
   }
 
   function stepAI() {
@@ -395,7 +416,9 @@ async function main() {
           ? 340
           : action.type === "occupy"
             ? 240
-            : 120;
+            : state.phase === "setup_place" || action.type === "place"
+              ? 36
+              : 120;
       aiTimer = window.setTimeout(stepAI, delay);
     } else {
       aiThinking = false;
@@ -426,22 +449,6 @@ async function main() {
     ui.help.hidden = true;
   }
 
-  function autoSetup(s: GameState): GameState {
-    let cur = s;
-    let guard = 0;
-    while (cur.phase === "setup_place" && guard < 5000) {
-      const pid = cur.currentPlayerId;
-      const diff = aiPlayers.get(pid) ?? "oficial";
-      const action = aiChooseAction(cur, pid, diff);
-      if (!action) break;
-      const r = reduce(cur, action, rng);
-      if (!r.ok) break;
-      cur = r.state;
-      guard += 1;
-    }
-    return cur;
-  }
-
   function startCampaign(aiCount: number, diff: Difficulty) {
     stopAI();
     const total = Math.min(6, Math.max(2, aiCount + 1));
@@ -462,15 +469,9 @@ async function main() {
     ui.loading.hidden = false;
     window.setTimeout(() => {
       let s = createGame({ players, rng });
-      s = autoSetup(s);
-      if (s.playerOrder[0] !== humanId && s.phase !== "over") {
-        const order = s.playerOrder;
-        const idx = order.indexOf(humanId);
-        if (idx > 0) {
-          s = { ...s, playerOrder: [...order.slice(idx), ...order.slice(0, idx)] };
-          s = beginTurn(s, humanId);
-        }
-      }
+      // Campaign: human places first in setup and takes turn 1 after it.
+      const rest = s.playerOrder.filter((id) => id !== humanId);
+      s = { ...s, playerOrder: [humanId, ...rest], currentPlayerId: humanId };
       state = s;
       selected = null;
       lastBattleKey = "x";

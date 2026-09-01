@@ -327,6 +327,10 @@ button.primary {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .die {
+    transition: none;
+  }
+
   .dice.rolling .die {
     transform: none;
   }

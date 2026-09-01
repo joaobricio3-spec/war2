@@ -87,6 +87,18 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
 
   const cells = new Map<TerritoryId, Cell>();
   let panned = false;
+  let baseX = 0;
+  let baseY = 0;
+  let shakeX = 0;
+  let shakeY = 0;
+  let trauma = 0;
+  const reducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+
+  const applyWorldPos = () => {
+    world.position.set(baseX + shakeX, baseY + shakeY);
+  };
 
   for (const l of LAYOUT) {
     const cell = new Container();
@@ -140,13 +152,32 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     const sy = app.screen.height / WORLD.height;
     const s = Math.max(sx, sy);
     world.scale.set(s);
-    world.position.set(
-      (app.screen.width - WORLD.width * s) / 2,
-      (app.screen.height - WORLD.height * s) / 2,
-    );
+    baseX = (app.screen.width - WORLD.width * s) / 2;
+    baseY = (app.screen.height - WORLD.height * s) / 2;
+    applyWorldPos();
   };
   fitWorld();
   app.renderer.on("resize", fitWorld);
+
+  // Camera shake: trauma decays on rAF, offset is trauma² so hits feel sharp
+  // then die. Pan lives on baseX/baseY so shake never drifts the map.
+  app.ticker.add((ticker) => {
+    const dt = Math.min(ticker.deltaMS / 1000, 0.1);
+    if (reducedMotion || trauma <= 0) {
+      if (shakeX !== 0 || shakeY !== 0) {
+        shakeX = 0;
+        shakeY = 0;
+        applyWorldPos();
+      }
+      trauma = 0;
+      return;
+    }
+    trauma = Math.max(0, trauma - 4.2 * dt);
+    const mag = trauma * trauma * 22;
+    shakeX = (Math.random() * 2 - 1) * mag;
+    shakeY = (Math.random() * 2 - 1) * mag;
+    applyWorldPos();
+  });
 
   let dragging = false;
   let lx = 0;
@@ -166,8 +197,9 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     const dy = e.clientY - ly;
     if (!panned && dx * dx + dy * dy < 36) return;
     panned = true;
-    world.x += dx;
-    world.y += dy;
+    baseX += dx;
+    baseY += dy;
+    applyWorldPos();
     lx = e.clientX;
     ly = e.clientY;
   });
@@ -221,5 +253,10 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     return app.ticker.FPS;
   }
 
-  return { render, fps, app };
+  function shake(amount: number) {
+    if (reducedMotion) return;
+    trauma = Math.min(1, trauma + amount);
+  }
+
+  return { render, fps, shake, app };
 }
