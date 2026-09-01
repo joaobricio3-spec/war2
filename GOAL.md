@@ -36,7 +36,8 @@ Sem `GATE_OK=1` no output do turno, o goal **não** está cumprido.
 - [x] `npm run typecheck` exit 0 — `package.json:13`
 - [x] `npm run build` exit 0 — `package.json:14`
 - [x] `npm run gate` imprime `GATE_OK=1` — `scripts/war-gate.mjs:81`
-- [x] Playthrough humano: title → campanha → setup jogável → reforço → dados → conquista com ocupação visível →
+- [x] Playthrough humano: title → campanha 1 IA Recruta → setup jogável (Bolívia) → reforço →
+      ataque humano Bolívia→Argentina com dados 6/3/2 vs 5/5/4 → conquista México + ocupe 1 →
       deslocamento/passar turno → Ajuda/Esc; console sem JS; screenshots em disco
       (perder um combate e save/reload já evidenciados em turnos anteriores).
 
@@ -62,7 +63,7 @@ Marque só com `arquivo:linha` + log de comando.
 - [x] Mapa no refresh; sem `maxFPS = 30` / `setInterval` — `packages/client/src/board.ts` `ticker.maxFPS = 0` + `scripts/war-gate.mjs:62-72`
 - [x] Dados rolam e assentam — `packages/client/src/dice.ts:67-75`
 - [x] Combate, conquista, "sua vez", "IA pensando" — `main.ts` status + `#occupy` + `dice.ts`
-- [x] Shake opcional (trauma², delta cap 0.1s, sem drift de pan); `prefers-reduced-motion` em dados/IA/overlays — `board.ts:162-176,256-258` + `main.ts:199` + `dice.ts:55` + `style.css:329-337,441-452`
+- [x] Shake opcional (trauma², delta cap 0.1s, sem drift de pan); `prefers-reduced-motion` em dados/IA/overlays — `board.ts:164-179,258-260` + `main.ts:199` + `dice.ts:55` + `style.css:329-337,441-452`
 - [x] Title / loading / empty / help / log / gameover — `index.html` overlays; setup jogável (humano posiciona, IA só na vez dela) — `main.ts:145-156,253-255,471-474` (sem `autoSetup`)
 
 ## Definition of Done — UX
