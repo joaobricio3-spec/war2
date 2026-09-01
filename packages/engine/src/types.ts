@@ -56,6 +56,7 @@ export interface OccupiedTerritory {
 export interface PendingOccupy {
   from: import("./map/classic.ts").TerritoryId;
   to: import("./map/classic.ts").TerritoryId;
+  minArmies: number;
   maxArmies: number;
 }
 
@@ -84,7 +85,7 @@ export interface GameState {
   conqueredThisTurn: boolean;
   pendingOccupy: PendingOccupy | null;
   armiesToPlace: ArmiesToPlace;
-  arrivedThisTurn: Partial<Record<import("./map/classic.ts").TerritoryId, number>>;
+  fortifiedThisTurn: boolean;
   mustTrade: boolean;
   lastBattle: LastBattle | null;
   winnerId: PlayerId | null;
@@ -108,6 +109,7 @@ export type Action =
       armies: 1 | 2 | 3;
     }
   | { type: "occupy"; playerId: PlayerId; armies: number }
+  | { type: "endAttack"; playerId: PlayerId }
   | {
       type: "fortify";
       playerId: PlayerId;

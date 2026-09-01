@@ -46,7 +46,7 @@ export function beginTurn(state: GameState, playerId: PlayerId): GameState {
     conqueredThisTurn: false,
     pendingOccupy: null,
     lastBattle: null,
-    arrivedThisTurn: {},
+    fortifiedThisTurn: false,
     armiesToPlace: emptyPending(),
     mustTrade: false,
   };
@@ -126,7 +126,7 @@ export function createGame(opts: {
     conqueredThisTurn: false,
     pendingOccupy: null,
     armiesToPlace: emptyPending(),
-    arrivedThisTurn: {},
+    fortifiedThisTurn: false,
     mustTrade: false,
     lastBattle: null,
     winnerId: null,

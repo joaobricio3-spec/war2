@@ -49,14 +49,13 @@ Nesta ordem:
 - Ataque exige ≥2 no território de origem (1 fica de ocupação). Dados de ataque = `min(3, exércitos − 1)`.
 - Defesa usa `min(3, exércitos)` (o de ocupação defende). Isto é a regra de tabuleiro clássica, **não** o Risk de 2 dados de defesa.
 - Ordenam-se os dados decrescentes; compara-se par a par; empate = defesa.
-- Conquista: defesa a 0. Ocupação imediata: de **1** até o número de exércitos que **participaram do último ataque** (máximo). Ocupação não pode deixar a origem vazia.
+- Conquista: defesa a 0. Ocupação imediata: move no mínimo o número de dados de ataque usados, no máximo origem−1, sempre deixando ≥1 na origem.
 - Quantos ataques quiser, de um ou vários territórios.
 
 ### Deslocamento
 
-- Só entre territórios **próprios e contíguos**.
-- Sempre resta ≥1 de ocupação.
-- Cada exército desloca-se **no máximo uma vez** no turno (não encadear o mesmo efetivo Brasil → Venezuela → México).
+- **Exatamente uma** transferência por turno, entre dois territórios **seus** ligados por um caminho em que **todos** os territórios são seus (não precisa ser adjacente).
+- Sempre resta ≥1 de ocupação na origem.
 
 ### Cartas após conquista
 

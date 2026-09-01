@@ -74,7 +74,7 @@ describe("occupy outranks forced trade", () => {
     const me = s.currentPlayerId;
     s.phase = "attack";
     s.mustTrade = true;
-    s.pendingOccupy = { from: "brasil", to: "venezuela", maxArmies: 3 };
+    s.pendingOccupy = { from: "brasil", to: "venezuela", minArmies: 3, maxArmies: 4 };
     s.territories.brasil = { ownerId: me, armies: 5 };
     s.territories.venezuela = { ownerId: me, armies: 0 };
     giveCards(s, me, [
@@ -218,7 +218,7 @@ describe("post-elimination hand limit", () => {
     if (!r6.ok) return;
     expect(r6.state.players.find((p) => p.id === "b")!.cards).toHaveLength(6);
     expect(r6.state.mustTrade).toBe(true);
-    const occ = reduce(r6.state, { type: "occupy", playerId: "b", armies: 1 }, rng);
+    const occ = reduce(r6.state, { type: "occupy", playerId: "b", armies: 3 }, rng);
     expect(occ.ok).toBe(true);
     if (!occ.ok) return;
     expect(occ.state.phase).toBe("reinforce");

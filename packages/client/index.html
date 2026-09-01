@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>War2</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23140c08'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23c4a35a' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23f0c987'/%3E%3C/svg%3E"
+    />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -12,6 +16,7 @@
         <p class="eyebrow">war2 · tabuleiro aberto</p>
         <h1>Mesa</h1>
         <p id="fps" class="fps">— fps</p>
+        <p id="status" class="status" hidden></p>
         <dl>
           <dt>fase</dt>
           <dd id="phase">—</dd>
@@ -22,44 +27,115 @@
           <dt>reforço</dt>
           <dd id="pending">—</dd>
         </dl>
+        <div id="dice" class="dice" hidden></div>
+        <div id="occupy" class="occupy" hidden>
+          <p class="occupy-label">Conquista — mova tropas</p>
+          <p id="occupy-hint" class="occupy-hint"></p>
+          <div id="occupy-btns" class="row"></div>
+        </div>
         <div id="cards" class="cards"></div>
+        <p id="cards-empty" class="empty" hidden>sem cartas</p>
         <div class="row">
           <button type="button" id="trade">Trocar 3 cartas</button>
           <button type="button" id="end" class="primary">Encerrar fase</button>
         </div>
+        <div class="row">
+          <button type="button" id="help-btn">Ajuda</button>
+          <button type="button" id="abandon">Abandonar</button>
+          <button type="button" id="title">Título</button>
+        </div>
         <p id="error" class="error"></p>
-        <p class="help">
-          Setup e reforço: clique num território seu. Ataque e deslocamento: origem e depois destino.
-          Roda do mouse = zoom. Arraste o mapa. Encerrar fase passa reforço → ataques → próximo turno.
-        </p>
         <div id="log" class="log"></div>
+        <p id="log-empty" class="empty" hidden>diário vazio</p>
       </aside>
       <div id="board"></div>
     </div>
 
     <div id="overlay">
       <div class="sheet">
-        <h2>Sentar à mesa</h2>
-        <p>Mesmo PC, ou uma sala com código de seis caracteres. Sem ranking, sem energia.</p>
-        <label>
-          Jogadores hotseat
-          <select id="nplayers">
-            <option>2</option>
-            <option selected>3</option>
-            <option>4</option>
-            <option>5</option>
-            <option>6</option>
-          </select>
-        </label>
-        <button type="button" id="hotseat" class="primary">Jogar no mesmo PC</button>
-        <hr />
-        <label>Apelido <input id="nick" placeholder="General" /></label>
-        <label>WebSocket <input id="ws" value="ws://localhost:8787/ws" /></label>
-        <label>Código <input id="code" placeholder="ABC123" maxlength="6" /></label>
+        <p class="eyebrow">war2 · conquista territorial</p>
+        <h2>War</h2>
+        <p>Uma campanha contra a IA no mesmo PC. Sem ranking, sem energia, sem teto de FPS.</p>
+
         <div class="row">
-          <button type="button" id="create">Criar sala</button>
-          <button type="button" id="join">Entrar</button>
-          <button type="button" id="startnet">Iniciar partida</button>
+          <label>
+            Adversários (IA)
+            <select id="aicount">
+              <option>1</option>
+              <option selected>2</option>
+              <option>3</option>
+              <option>4</option>
+              <option>5</option>
+            </select>
+          </label>
+          <label>
+            Dificuldade
+            <select id="aidiff">
+              <option value="recruta">Recruta</option>
+              <option value="oficial" selected>Oficial</option>
+              <option value="marechal">Marechal</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <button type="button" id="campaign" class="primary">Nova campanha</button>
+          <button type="button" id="continue" disabled>Continuar campanha</button>
+        </div>
+
+        <hr />
+        <details>
+          <summary>Hotseat e salas entre amigos</summary>
+          <label>
+            Jogadores hotseat
+            <select id="nplayers">
+              <option>2</option>
+              <option selected>3</option>
+              <option>4</option>
+              <option>5</option>
+              <option>6</option>
+            </select>
+          </label>
+          <button type="button" id="hotseat">Jogar no mesmo PC</button>
+          <hr />
+          <label>Apelido <input id="nick" placeholder="General" /></label>
+          <label>WebSocket <input id="ws" value="ws://localhost:8787/ws" /></label>
+          <label>Código <input id="code" placeholder="ABC123" maxlength="6" /></label>
+          <div class="row">
+            <button type="button" id="create">Criar sala</button>
+            <button type="button" id="join">Entrar</button>
+            <button type="button" id="startnet">Iniciar partida</button>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div id="gameover" hidden>
+      <div class="sheet">
+        <p class="eyebrow">fim de campanha</p>
+        <h2 id="gameover-title">—</h2>
+        <p id="gameover-sub"></p>
+        <div class="row">
+          <button type="button" id="gameover-title-btn" class="primary">Voltar ao título</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="loading" hidden>
+      <div class="sheet">
+        <p class="eyebrow">war2</p>
+        <h2>Preparando o tabuleiro…</h2>
+        <p id="loading-sub">Embaralhando territórios e objetivos. Você posiciona as tropas restantes.</p>
+      </div>
+    </div>
+
+    <div id="help" hidden>
+      <div class="sheet">
+        <p class="eyebrow">ajuda</p>
+        <h2>Como jogar</h2>
+        <p>Setup e reforço: clique num território seu; Espaço coloca 1 na seleção. Ataque e deslocamento: origem e depois destino. Após conquistar, escolha quantas tropas entram (mínimo = dados usados).</p>
+        <p>Roda do mouse = zoom. Arraste o mapa. Esc fecha esta ajuda.</p>
+        <div class="row">
+          <button type="button" id="help-close" class="primary">Fechar</button>
         </div>
       </div>
     </div>

@@ -8,7 +8,7 @@ Complemento de `classic.md`. Cada item tem (ou deve ter) teste em `@war2/engine`
 - Ataque 3 vs defesa 1: só se compara o maior de cada lado; o atacante só pode perder 1.
 - Ataque 3 vs defesa 3: três comparações.
 - Não se ataca com 1 no território. Não se ataca território próprio nem não-adjacente.
-- Depois da conquista, `occupy` é a **única** ação legal até acontecer (inclusive se a mão passou de 5 por eliminação). `armies` ∈ `[1, dadosDoÚltimoAtaque]` e origem fica ≥1.
+- Depois da conquista, `occupy` é a **única** ação legal até acontecer (inclusive se a mão passou de 5 por eliminação). `armies` ∈ `[min(dadosUsados, origem−1), origem−1]`, origem fica ≥1.
 - Vitória de territórios/continentes só é checada **depois** do occupy (o território conquistado não fica a 0 exércitos como estado estável).
 
 ## Cartas
@@ -43,9 +43,9 @@ Complemento de `classic.md`. Cada item tem (ou deve ter) teste em `@war2/engine`
 
 ## Deslocamento
 
-- Mover 5 do Brasil à Venezuela e, no mesmo turno, esses 5 da Venezuela ao México: **ilegal**.
-- Exércitos que **já estavam** na Venezuela podem ir ao México no mesmo turno.
-- Modelo: cada território acumula `arrivedThisTurn`; só `armies - 1 - arrivedThisTurn` pode sair.
+- **Uma** transferência (`fortify`) por turno; a segunda falha (`fortifiedThisTurn`).
+- Origem e destino próprios devem estar ligados por uma cadeia de territórios seus (não só adjacentes). Brasil → México é legal se a Venezuela no meio for sua; ilegal se o caminho estiver cortado.
+- Sempre resta ≥1 na origem.
 
 ## Setup
 

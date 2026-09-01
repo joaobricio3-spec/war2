@@ -1,4 +1,5 @@
 export { reduce } from "./reduce.ts";
+export { aiChooseAction, type Difficulty } from "./ai.ts";
 export { createGame, beginTurn, drawCard } from "./createGame.ts";
 export { viewFor } from "./view.ts";
 export { listLegalActions } from "./legal.ts";
@@ -32,4 +33,5 @@ export type {
   GameCard,
   Objective,
   Player,
+  LastBattle,
 } from "./types.ts";

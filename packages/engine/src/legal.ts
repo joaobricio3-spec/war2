@@ -1,8 +1,23 @@
 import { pendingPlaceTotal, isValidTrade } from "./cards.ts";
 import { attackDiceCount } from "./combat.ts";
-import { areNeighbors, TERRITORY_IDS, type TerritoryId } from "./map/classic.ts";
+import { areNeighbors, TERRITORY_BY_ID, TERRITORY_IDS, type TerritoryId } from "./map/classic.ts";
 import { territoryContinent } from "./objectives.ts";
 import type { Action, GameState, PlayerId } from "./types.ts";
+
+export function reachableOwn(state: GameState, from: TerritoryId, playerId: PlayerId): Set<TerritoryId> {
+  const seen = new Set<TerritoryId>([from]);
+  const stack: TerritoryId[] = [from];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    for (const n of TERRITORY_BY_ID[cur].neighbors) {
+      if (seen.has(n) || state.territories[n].ownerId !== playerId) continue;
+      seen.add(n);
+      stack.push(n);
+    }
+  }
+  seen.delete(from);
+  return seen; // all own territories connected to `from` through own territories
+}
 
 function placeableCount(state: GameState, territoryId: TerritoryId): number {
   const byTer = state.armiesToPlace.byTerritory[territoryId] ?? 0;
@@ -21,10 +36,10 @@ export function listLegalActions(state: GameState, playerId: PlayerId): Action[]
   }
 
   if (state.pendingOccupy) {
-    const { maxArmies, from } = state.pendingOccupy;
+    const { minArmies, maxArmies, from } = state.pendingOccupy;
     const origin = state.territories[from].armies;
     const max = Math.min(maxArmies, origin - 1);
-    for (let a = 1; a <= max; a++) out.push({ type: "occupy", playerId, armies: a });
+    for (let a = minArmies; a <= max; a++) out.push({ type: "occupy", playerId, armies: a });
     return out;
   }
 
@@ -71,26 +86,25 @@ export function listLegalActions(state: GameState, playerId: PlayerId): Action[]
       }
     }
     out.push({ type: "endTurn", playerId });
-    for (const from of mine) {
-      const arrived = state.arrivedThisTurn[from] ?? 0;
-      const movable = state.territories[from].armies - 1 - arrived;
-      if (movable < 1) continue;
-      for (const to of TERRITORY_BY_NEIGHBORS(from)) {
-        if (state.territories[to].ownerId !== playerId) continue;
-        out.push({ type: "fortify", playerId, from, to, armies: 1 });
+    out.push({ type: "endAttack", playerId });
+    if (!state.fortifiedThisTurn) {
+      for (const from of mine) {
+        if (state.territories[from].armies <= 1) continue;
+        for (const to of reachableOwn(state, from, playerId)) {
+          out.push({ type: "fortify", playerId, from, to, armies: 1 });
+        }
       }
     }
     return out;
   }
 
   if (state.phase === "fortify") {
-    for (const from of mine) {
-      const arrived = state.arrivedThisTurn[from] ?? 0;
-      const movable = state.territories[from].armies - 1 - arrived;
-      if (movable < 1) continue;
-      for (const to of TERRITORY_BY_NEIGHBORS(from)) {
-        if (state.territories[to].ownerId !== playerId) continue;
-        out.push({ type: "fortify", playerId, from, to, armies: 1 });
+    if (!state.fortifiedThisTurn) {
+      for (const from of mine) {
+        if (state.territories[from].armies <= 1) continue;
+        for (const to of reachableOwn(state, from, playerId)) {
+          out.push({ type: "fortify", playerId, from, to, armies: 1 });
+        }
       }
     }
     out.push({ type: "endTurn", playerId });

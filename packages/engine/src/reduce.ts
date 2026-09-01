@@ -2,6 +2,7 @@ import { isValidTrade, pendingPlaceTotal, tradeArmies } from "./cards.ts";
 import { cloneState } from "./clone.ts";
 import { attackDiceCount, defendDiceCount, resolveBattle } from "./combat.ts";
 import { beginTurn, drawCard, emptyPending, nextAlive } from "./createGame.ts";
+import { reachableOwn } from "./legal.ts";
 import { areNeighbors, TERRITORY_BY_ID, type TerritoryId } from "./map/classic.ts";
 import {
   convertOrphanDestroyObjectives,
@@ -97,6 +98,8 @@ export function reduce(state: GameState, action: Action, rng: Rng): ReduceResult
       return attack(state, action, rng);
     case "occupy":
       return occupy(state, action);
+    case "endAttack":
+      return endAttack(state, action);
     case "fortify":
       return fortify(state, action);
     case "endTurn":
@@ -231,9 +234,24 @@ function attack(
     nTo.armies = 0;
     nTo.ownerId = action.playerId;
     next.conqueredThisTurn = true;
-    next.pendingOccupy = { from: action.from, to: action.to, maxArmies: diceN };
+    const maxArmies = nFrom.armies - 1;
+    const minArmies = Math.min(diceN, maxArmies);
+    next.pendingOccupy = { from: action.from, to: action.to, minArmies, maxArmies };
     eliminateIfNeeded(next, victim, action.playerId);
   }
+  return { ok: true, state: next };
+}
+
+function endAttack(
+  state: GameState,
+  action: Extract<Action, { type: "endAttack" }>,
+): ReduceResult {
+  if (state.mustTrade) return fail("troca obrigatória");
+  if (state.pendingOccupy) return fail("ocupe primeiro");
+  if (state.phase !== "attack") return fail("não é ataque");
+  const next = cloneState(state);
+  next.phase = "fortify";
+  void action;
   return { ok: true, state: next };
 }
 
@@ -242,8 +260,8 @@ function occupy(
   action: Extract<Action, { type: "occupy" }>,
 ): ReduceResult {
   if (state.phase !== "attack" || !state.pendingOccupy) return fail("nada a ocupar");
-  const { from, to, maxArmies } = state.pendingOccupy;
-  if (action.armies < 1 || action.armies > maxArmies) return fail("ocupação fora do intervalo");
+  const { from, to, minArmies, maxArmies } = state.pendingOccupy;
+  if (action.armies < minArmies || action.armies > maxArmies) return fail("ocupação fora do intervalo");
   const next = cloneState(state);
   const origin = next.territories[from];
   if (origin.armies - action.armies < 1) return fail("origem precisa ficar com 1");
@@ -269,21 +287,24 @@ function fortify(
     return fortify(nextPhase, action);
   }
   if (state.phase !== "fortify") return fail("não é deslocamento");
+  if (state.fortifiedThisTurn) return fail("só um deslocamento por turno");
   if (action.armies < 1) return fail("armies < 1");
-  if (!areNeighbors(action.from, action.to)) return fail("não são vizinhos");
+  if (action.from === action.to) return fail("origem e destino iguais");
   const from = state.territories[action.from];
   const to = state.territories[action.to];
   if (from.ownerId !== action.playerId || to.ownerId !== action.playerId) {
     return fail("só entre territórios próprios");
   }
-  const arrived = state.arrivedThisTurn[action.from] ?? 0;
-  const movable = from.armies - 1 - arrived;
-  if (action.armies > movable) return fail("exército já deslocado ou ocupação");
+  if (!reachableOwn(state, action.from, action.playerId).has(action.to)) {
+    return fail("sem caminho por territórios seus");
+  }
+  const movable = from.armies - 1;
+  if (action.armies > movable) return fail("origem precisa ficar com 1");
 
   const next = cloneState(state);
   next.territories[action.from].armies -= action.armies;
   next.territories[action.to].armies += action.armies;
-  next.arrivedThisTurn[action.to] = (next.arrivedThisTurn[action.to] ?? 0) + action.armies;
+  next.fortifiedThisTurn = true;
   return { ok: true, state: checkWin(next) };
 }
 
