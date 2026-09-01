@@ -86,6 +86,7 @@ export function listLegalActions(state: GameState, playerId: PlayerId): Action[]
       }
     }
     out.push({ type: "endTurn", playerId });
+    out.push({ type: "endAttack", playerId });
     if (!state.fortifiedThisTurn) {
       for (const from of mine) {
         if (state.territories[from].armies <= 1) continue;

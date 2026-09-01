@@ -98,6 +98,8 @@ export function reduce(state: GameState, action: Action, rng: Rng): ReduceResult
       return attack(state, action, rng);
     case "occupy":
       return occupy(state, action);
+    case "endAttack":
+      return endAttack(state, action);
     case "fortify":
       return fortify(state, action);
     case "endTurn":
@@ -237,6 +239,19 @@ function attack(
     next.pendingOccupy = { from: action.from, to: action.to, minArmies, maxArmies };
     eliminateIfNeeded(next, victim, action.playerId);
   }
+  return { ok: true, state: next };
+}
+
+function endAttack(
+  state: GameState,
+  action: Extract<Action, { type: "endAttack" }>,
+): ReduceResult {
+  if (state.mustTrade) return fail("troca obrigatória");
+  if (state.pendingOccupy) return fail("ocupe primeiro");
+  if (state.phase !== "attack") return fail("não é ataque");
+  const next = cloneState(state);
+  next.phase = "fortify";
+  void action;
   return { ok: true, state: next };
 }
 

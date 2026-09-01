@@ -237,6 +237,10 @@ async function main() {
       mode !== "campaign" || (state.currentPlayerId === humanId && !aiThinking && state.phase !== "over");
     ui.end.disabled = !humanTurn;
     ui.trade.disabled = !humanTurn;
+    if (state.phase === "reinforce") ui.end.textContent = "Encerrar reforço";
+    else if (state.phase === "attack") ui.end.textContent = "Ir ao deslocamento";
+    else if (state.phase === "fortify") ui.end.textContent = "Passar o turno";
+    else ui.end.textContent = "Encerrar fase";
 
     if (state.pendingOccupy) {
       ui.pending.textContent += ` | ocupe ${state.pendingOccupy.to} com ${state.pendingOccupy.minArmies}–${state.pendingOccupy.maxArmies}`;
@@ -488,7 +492,8 @@ async function main() {
     if (mode === "campaign" && (aiThinking || state.currentPlayerId !== humanId)) return;
     const me = mode === "net" ? netId : mode === "campaign" ? humanId : state.currentPlayerId;
     if (state.phase === "reinforce") dispatch({ type: "endReinforce", playerId: me });
-    else dispatch({ type: "endTurn", playerId: me });
+    else if (state.phase === "attack") dispatch({ type: "endAttack", playerId: me });
+    else if (state.phase === "fortify") dispatch({ type: "endTurn", playerId: me });
   });
 
   ui.trade.addEventListener("click", () => {

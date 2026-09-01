@@ -109,6 +109,7 @@ export type Action =
       armies: 1 | 2 | 3;
     }
   | { type: "occupy"; playerId: PlayerId; armies: number }
+  | { type: "endAttack"; playerId: PlayerId }
   | {
       type: "fortify";
       playerId: PlayerId;

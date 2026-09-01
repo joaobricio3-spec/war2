@@ -280,6 +280,50 @@ describe("reduce", () => {
     if (!r4.ok) expect(r4.error).toBe("sem caminho por territórios seus");
   });
 
+  it("endAttack moves from attack to fortify; rejected while pendingOccupy; then connected fortify + endTurn", () => {
+    let s = dumpAll(finishSetup(game()));
+    const me = s.currentPlayerId;
+    const other = s.playerOrder.find((id) => id !== me)!;
+    s = cloneState(s);
+    s.phase = "attack";
+    s.pendingOccupy = null;
+    s.fortifiedThisTurn = false;
+    s.mustTrade = false;
+    for (const id of TERRITORY_IDS) {
+      s.territories[id] = { ownerId: other, armies: 1 };
+    }
+    s.territories.brasil = { ownerId: me, armies: 5 };
+    s.territories.venezuela = { ownerId: me, armies: 1 };
+
+    const blocked = cloneState(s);
+    blocked.pendingOccupy = { from: "brasil", to: "argentina", minArmies: 1, maxArmies: 2 };
+    const rejected = reduce(blocked, { type: "endAttack", playerId: me }, rng);
+    expect(rejected.ok).toBe(false);
+    if (!rejected.ok) expect(rejected.error).toBe("ocupe primeiro");
+
+    const r = reduce(s, { type: "endAttack", playerId: me }, rng);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.state.phase).toBe("fortify");
+
+    const f = reduce(
+      r.state,
+      { type: "fortify", playerId: me, from: "brasil", to: "venezuela", armies: 4 },
+      rng,
+    );
+    expect(f.ok).toBe(true);
+    if (!f.ok) return;
+    expect(f.state.phase).toBe("fortify");
+    expect(f.state.fortifiedThisTurn).toBe(true);
+    expect(f.state.territories.brasil.armies).toBe(1);
+    expect(f.state.territories.venezuela.armies).toBe(5);
+
+    const ended = reduce(f.state, { type: "endTurn", playerId: me }, rng);
+    expect(ended.ok).toBe(true);
+    if (!ended.ok) return;
+    expect(ended.state.currentPlayerId).not.toBe(me);
+  });
+
   it("plays random legal moves without crashing (smoke)", () => {
     let s = finishSetup(game());
     const smokeRng = createSeededRng(123);
