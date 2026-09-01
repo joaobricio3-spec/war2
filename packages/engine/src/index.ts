@@ -33,4 +33,5 @@ export type {
   GameCard,
   Objective,
   Player,
+  LastBattle,
 } from "./types.ts";

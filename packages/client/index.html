@@ -12,6 +12,7 @@
         <p class="eyebrow">war2 · tabuleiro aberto</p>
         <h1>Mesa</h1>
         <p id="fps" class="fps">— fps</p>
+        <p id="status" class="status" hidden></p>
         <dl>
           <dt>fase</dt>
           <dd id="phase">—</dd>
@@ -22,10 +23,14 @@
           <dt>reforço</dt>
           <dd id="pending">—</dd>
         </dl>
+        <div id="dice" class="dice" hidden></div>
         <div id="cards" class="cards"></div>
         <div class="row">
           <button type="button" id="trade">Trocar 3 cartas</button>
           <button type="button" id="end" class="primary">Encerrar fase</button>
+        </div>
+        <div class="row">
+          <button type="button" id="title">Título</button>
         </div>
         <p id="error" class="error"></p>
         <p class="help">
@@ -39,28 +44,78 @@
 
     <div id="overlay">
       <div class="sheet">
-        <h2>Sentar à mesa</h2>
-        <p>Mesmo PC, ou uma sala com código de seis caracteres. Sem ranking, sem energia.</p>
-        <label>
-          Jogadores hotseat
-          <select id="nplayers">
-            <option>2</option>
-            <option selected>3</option>
-            <option>4</option>
-            <option>5</option>
-            <option>6</option>
-          </select>
-        </label>
-        <button type="button" id="hotseat" class="primary">Jogar no mesmo PC</button>
-        <hr />
-        <label>Apelido <input id="nick" placeholder="General" /></label>
-        <label>WebSocket <input id="ws" value="ws://localhost:8787/ws" /></label>
-        <label>Código <input id="code" placeholder="ABC123" maxlength="6" /></label>
+        <p class="eyebrow">war2 · conquista territorial</p>
+        <h2>War</h2>
+        <p>Uma campanha contra a IA no mesmo PC. Sem ranking, sem energia, sem teto de FPS.</p>
+
         <div class="row">
-          <button type="button" id="create">Criar sala</button>
-          <button type="button" id="join">Entrar</button>
-          <button type="button" id="startnet">Iniciar partida</button>
+          <label>
+            Adversários (IA)
+            <select id="aicount">
+              <option>1</option>
+              <option selected>2</option>
+              <option>3</option>
+              <option>4</option>
+              <option>5</option>
+            </select>
+          </label>
+          <label>
+            Dificuldade
+            <select id="aidiff">
+              <option value="recruta">Recruta</option>
+              <option value="oficial" selected>Oficial</option>
+              <option value="marechal">Marechal</option>
+            </select>
+          </label>
         </div>
+        <div class="row">
+          <button type="button" id="campaign" class="primary">Nova campanha</button>
+          <button type="button" id="continue" disabled>Continuar campanha</button>
+        </div>
+
+        <hr />
+        <details>
+          <summary>Hotseat e salas entre amigos</summary>
+          <label>
+            Jogadores hotseat
+            <select id="nplayers">
+              <option>2</option>
+              <option selected>3</option>
+              <option>4</option>
+              <option>5</option>
+              <option>6</option>
+            </select>
+          </label>
+          <button type="button" id="hotseat">Jogar no mesmo PC</button>
+          <hr />
+          <label>Apelido <input id="nick" placeholder="General" /></label>
+          <label>WebSocket <input id="ws" value="ws://localhost:8787/ws" /></label>
+          <label>Código <input id="code" placeholder="ABC123" maxlength="6" /></label>
+          <div class="row">
+            <button type="button" id="create">Criar sala</button>
+            <button type="button" id="join">Entrar</button>
+            <button type="button" id="startnet">Iniciar partida</button>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div id="gameover" hidden>
+      <div class="sheet">
+        <p class="eyebrow">fim de campanha</p>
+        <h2 id="gameover-title">—</h2>
+        <p id="gameover-sub"></p>
+        <div class="row">
+          <button type="button" id="gameover-title-btn" class="primary">Voltar ao título</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="loading" hidden>
+      <div class="sheet">
+        <p class="eyebrow">war2</p>
+        <h2>Preparando o tabuleiro…</h2>
+        <p id="loading-sub">Carregando mapa e regras.</p>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
