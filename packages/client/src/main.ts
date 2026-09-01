@@ -87,6 +87,27 @@ function log(line: string) {
   ui.log.prepend(p);
 }
 
+function describeAction(a: Action): string {
+  switch (a.type) {
+    case "place":
+      return `reforço +${a.count} em ${a.territoryId}`;
+    case "trade":
+      return "troca de cartas";
+    case "endReinforce":
+      return "encerrou o reforço";
+    case "attack":
+      return `ataque ${a.from} → ${a.to}`;
+    case "occupy":
+      return `ocupou com ${a.armies}`;
+    case "fortify":
+      return `deslocou ${a.armies}: ${a.from} → ${a.to}`;
+    case "endTurn":
+      return "passou o turno";
+    default:
+      return "";
+  }
+}
+
 async function main() {
   const canvasHost = document.querySelector("#board") as HTMLElement;
   let state: GameState | null = null;
@@ -256,7 +277,7 @@ async function main() {
       return;
     }
     applyLocal(action);
-    log(`${action.type}`);
+    if (ui.error.textContent === "") log(describeAction(action));
     paint();
     if (mode === "campaign") maybeRunAI();
   }
