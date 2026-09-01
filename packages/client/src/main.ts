@@ -41,14 +41,20 @@ const ui = {
   objective: document.querySelector("#objective") as HTMLElement,
   pending: document.querySelector("#pending") as HTMLElement,
   dice: document.querySelector("#dice") as HTMLElement,
+  occupy: document.querySelector("#occupy") as HTMLElement,
+  occupyHint: document.querySelector("#occupy-hint") as HTMLElement,
+  occupyBtns: document.querySelector("#occupy-btns") as HTMLElement,
   cards: document.querySelector("#cards") as HTMLElement,
+  cardsEmpty: document.querySelector("#cards-empty") as HTMLElement,
   log: document.querySelector("#log") as HTMLElement,
+  logEmpty: document.querySelector("#log-empty") as HTMLElement,
   error: document.querySelector("#error") as HTMLElement,
   overlay: document.querySelector("#overlay") as HTMLElement,
   gameover: document.querySelector("#gameover") as HTMLElement,
   gameoverTitle: document.querySelector("#gameover-title") as HTMLElement,
   gameoverSub: document.querySelector("#gameover-sub") as HTMLElement,
   loading: document.querySelector("#loading") as HTMLElement,
+  help: document.querySelector("#help") as HTMLElement,
   trade: document.querySelector("#trade") as HTMLButtonElement,
   end: document.querySelector("#end") as HTMLButtonElement,
   continue: document.querySelector("#continue") as HTMLButtonElement,
@@ -136,13 +142,10 @@ async function main() {
       if (mode === "campaign" && (aiThinking || state.currentPlayerId !== humanId)) return;
       const me = mode === "net" ? netId : mode === "campaign" ? humanId : state.currentPlayerId;
       viewer = me;
+      if (state.pendingOccupy) return;
       if (state.phase === "setup_place" || state.phase === "reinforce") {
         dispatch({ type: "place", playerId: me, territoryId: id, count: 1 });
         selected = id;
-        return;
-      }
-      if (state.phase === "attack" && state.pendingOccupy) {
-        maybeAutoOccupy();
         return;
       }
       if (!selected) {
@@ -150,13 +153,24 @@ async function main() {
         paint();
         return;
       }
+      const dests = legalTargets(state, me);
       if (state.phase === "attack") {
+        if (!dests.has(id)) {
+          selected = id;
+          paint();
+          return;
+        }
         const from = selected;
         const n = Math.min(3, state.territories[from].armies - 1);
         if (n === 1 || n === 2 || n === 3) {
           dispatch({ type: "attack", playerId: me, from, to: id, armies: n });
         }
       } else if (state.phase === "fortify") {
+        if (!dests.has(id)) {
+          selected = id;
+          paint();
+          return;
+        }
         const from = selected;
         const armies = state.territories[from].armies - 1;
         if (armies >= 1) dispatch({ type: "fortify", playerId: me, from, to: id, armies });
@@ -181,7 +195,7 @@ async function main() {
 
   function legalTargets(s: GameState, me: PlayerId): Set<TerritoryId> {
     const out = new Set<TerritoryId>();
-    if (s.currentPlayerId !== me) return out;
+    if (s.currentPlayerId !== me || s.pendingOccupy) return out;
     if (s.phase !== "attack" && s.phase !== "fortify") return out;
     const kind = s.phase === "attack" ? "attack" : "fortify";
     const legal = listLegalActions(s, me).filter((a) => a.type === kind);
@@ -233,8 +247,10 @@ async function main() {
       ui.status.hidden = true;
     }
 
+    const mineCards = p?.cards ?? [];
     ui.cards.innerHTML = "";
-    for (const c of p?.cards ?? []) {
+    ui.cardsEmpty.hidden = mineCards.length > 0;
+    for (const c of mineCards) {
       const b = document.createElement("button");
       b.type = "button";
       b.dataset.card = c.id;
@@ -245,21 +261,40 @@ async function main() {
 
     const humanTurn =
       mode !== "campaign" || (state.currentPlayerId === humanId && !aiThinking && state.phase !== "over");
-    ui.end.disabled = !humanTurn;
+    ui.end.disabled = !humanTurn || !!state.pendingOccupy;
     ui.trade.disabled = !humanTurn;
     if (state.phase === "reinforce") ui.end.textContent = "Encerrar reforço";
     else if (state.phase === "attack") ui.end.textContent = "Ir ao deslocamento";
     else if (state.phase === "fortify") ui.end.textContent = "Passar o turno";
     else ui.end.textContent = "Encerrar fase";
 
-    if (state.pendingOccupy) {
-      ui.pending.textContent += ` | ocupe ${state.pendingOccupy.to} com ${state.pendingOccupy.minArmies}–${state.pendingOccupy.maxArmies}`;
-    }
+    paintOccupy(state, me);
+    ui.logEmpty.hidden = ui.log.childElementCount > 0;
     updateDice();
-    maybeAutoOccupy();
   }
 
-  let occupying = false;
+  function paintOccupy(s: GameState, me: PlayerId) {
+    const pend = s.pendingOccupy;
+    const mine = s.currentPlayerId === me && !aiThinking;
+    if (!pend || !mine) {
+      ui.occupy.hidden = true;
+      ui.occupyBtns.innerHTML = "";
+      return;
+    }
+    ui.occupy.hidden = false;
+    ui.status.hidden = false;
+    ui.status.textContent = "Conquista — ocupe o território";
+    ui.status.dataset.tone = "you";
+    ui.occupyHint.textContent = `${pend.to}: ${pend.minArmies} a ${pend.maxArmies} exércitos (1 fica na origem)`;
+    ui.occupyBtns.innerHTML = "";
+    for (let n = pend.minArmies; n <= pend.maxArmies; n++) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = String(n);
+      b.addEventListener("click", () => dispatch({ type: "occupy", playerId: me, armies: n }));
+      ui.occupyBtns.append(b);
+    }
+  }
 
   function applyLocal(action: Action) {
     if (!state) return;
@@ -289,22 +324,6 @@ async function main() {
     if (ui.error.textContent === "") log(describeAction(action));
     paint();
     if (mode === "campaign") maybeRunAI();
-  }
-
-  function maybeAutoOccupy() {
-    if (occupying || !state?.pendingOccupy || state.phase === "over") return;
-    const me = mode === "net" ? netId : mode === "campaign" ? humanId : state.currentPlayerId;
-    if ((mode === "net" || mode === "campaign") && me !== state.currentPlayerId) return;
-    const acts = listLegalActions(state, me).filter((a) => a.type === "occupy");
-    const max = acts.at(-1);
-    if (max && max.type === "occupy") {
-      occupying = true;
-      try {
-        dispatch(max);
-      } finally {
-        occupying = false;
-      }
-    }
   }
 
   function saveCampaign() {
@@ -404,6 +423,7 @@ async function main() {
     ui.overlay.hidden = true;
     ui.gameover.hidden = true;
     ui.loading.hidden = true;
+    ui.help.hidden = true;
   }
 
   function autoSetup(s: GameState): GameState {
@@ -438,27 +458,30 @@ async function main() {
     ws?.close();
     ws = null;
 
-    let s = createGame({ players, rng });
-    s = autoSetup(s);
-    // Grow rule: o humano começa o turno 1.
-    if (s.playerOrder[0] !== humanId && s.phase !== "over") {
-      const order = s.playerOrder;
-      const idx = order.indexOf(humanId);
-      if (idx > 0) {
-        s = { ...s, playerOrder: [...order.slice(idx), ...order.slice(0, idx)] };
-        s = beginTurn(s, humanId);
+    ui.overlay.hidden = true;
+    ui.loading.hidden = false;
+    window.setTimeout(() => {
+      let s = createGame({ players, rng });
+      s = autoSetup(s);
+      if (s.playerOrder[0] !== humanId && s.phase !== "over") {
+        const order = s.playerOrder;
+        const idx = order.indexOf(humanId);
+        if (idx > 0) {
+          s = { ...s, playerOrder: [...order.slice(idx), ...order.slice(0, idx)] };
+          s = beginTurn(s, humanId);
+        }
       }
-    }
-    state = s;
-    selected = null;
-    lastBattleKey = "x"; // force dice refresh
-    ui.log.innerHTML = "";
-    hideOverlays();
-    saveCampaign();
-    ui.continue.disabled = false;
-    log(`nova campanha — ${aiCount} IA(s) ${diff}`);
-    paint();
-    maybeRunAI();
+      state = s;
+      selected = null;
+      lastBattleKey = "x";
+      ui.log.innerHTML = "";
+      hideOverlays();
+      saveCampaign();
+      ui.continue.disabled = false;
+      log(`nova campanha — ${aiCount} IA(s) ${diff}`);
+      paint();
+      maybeRunAI();
+    }, 40);
   }
 
   function continueCampaign() {
@@ -487,10 +510,20 @@ async function main() {
     stopAI();
     cancelDice();
     ui.dice.hidden = true;
+    ui.occupy.hidden = true;
     ui.gameover.hidden = true;
     ui.loading.hidden = true;
+    ui.help.hidden = true;
     ui.continue.disabled = loadCampaign() === null;
     ui.overlay.hidden = false;
+  }
+
+  function abandonCampaign() {
+    stopAI();
+    localStorage.removeItem(SAVE_KEY);
+    state = null;
+    ui.log.innerHTML = "";
+    goToTitle();
   }
 
   board.app.ticker.add(() => {
@@ -527,9 +560,24 @@ async function main() {
   });
   ui.continue.addEventListener("click", () => continueCampaign());
   document.querySelector("#title")?.addEventListener("click", () => goToTitle());
+  document.querySelector("#abandon")?.addEventListener("click", () => abandonCampaign());
   document.querySelector("#gameover-title-btn")?.addEventListener("click", () => goToTitle());
+  document.querySelector("#help-btn")?.addEventListener("click", () => {
+    ui.help.hidden = false;
+  });
+  document.querySelector("#help-close")?.addEventListener("click", () => {
+    ui.help.hidden = true;
+  });
+  ui.help.addEventListener("click", (e) => {
+    if (e.target === ui.help) ui.help.hidden = true;
+  });
   window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !ui.gameover.hidden) goToTitle();
+    if (e.key !== "Escape") return;
+    if (!ui.help.hidden) {
+      ui.help.hidden = true;
+      return;
+    }
+    if (!ui.gameover.hidden || !ui.overlay.hidden) goToTitle();
   });
 
   document.querySelector("#hotseat")?.addEventListener("click", () => {

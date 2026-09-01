@@ -16,9 +16,12 @@ html,
 body {
   margin: 0;
   height: 100%;
+  overflow-x: hidden;
   background: var(--ink);
   color: var(--vellum);
   font-family: Candara, "Segoe UI", sans-serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
 }
 
 h1,
@@ -122,6 +125,8 @@ button {
   color: var(--vellum);
   border: 1px solid color-mix(in srgb, var(--brass) 55%, transparent);
   padding: 0.5rem 0.75rem;
+  min-height: 44px;
+  min-width: 44px;
 }
 
 button:focus-visible {
@@ -328,7 +333,8 @@ button.primary {
 }
 
 #gameover,
-#loading {
+#loading,
+#help {
   position: fixed;
   inset: 0;
   display: grid;
@@ -336,12 +342,59 @@ button.primary {
   background:
     linear-gradient(rgb(20 12 8 / 0.62), rgb(20 12 8 / 0.72)),
     url("/assets/felt-table.png") center / cover;
+  animation: sheet-in 160ms ease;
 }
 
 #gameover[hidden],
-#loading[hidden] {
+#loading[hidden],
+#help[hidden] {
   display: none !important;
   pointer-events: none;
+}
+
+#overlay:not([hidden]) {
+  animation: sheet-in 160ms ease;
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.occupy {
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--lamp);
+  background: color-mix(in srgb, var(--ink) 40%, transparent);
+}
+
+.occupy[hidden] {
+  display: none;
+}
+
+.occupy-label {
+  margin: 0 0 0.2rem;
+  color: var(--lamp);
+  letter-spacing: 0.06em;
+}
+
+.occupy-hint {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+}
+
+.empty {
+  margin: 0 0 0.6rem;
+  font-size: 0.8rem;
+  color: color-mix(in srgb, var(--vellum) 55%, transparent);
+}
+
+.empty[hidden] {
+  display: none;
 }
 
 .sheet details {
@@ -384,5 +437,12 @@ button.primary {
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto;
+  }
+
+  #overlay:not([hidden]),
+  #gameover,
+  #loading,
+  #help {
+    animation: none;
   }
 }

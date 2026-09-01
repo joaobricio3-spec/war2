@@ -28,20 +28,25 @@
           <dd id="pending">—</dd>
         </dl>
         <div id="dice" class="dice" hidden></div>
+        <div id="occupy" class="occupy" hidden>
+          <p class="occupy-label">Conquista — mova tropas</p>
+          <p id="occupy-hint" class="occupy-hint"></p>
+          <div id="occupy-btns" class="row"></div>
+        </div>
         <div id="cards" class="cards"></div>
+        <p id="cards-empty" class="empty" hidden>sem cartas</p>
         <div class="row">
           <button type="button" id="trade">Trocar 3 cartas</button>
           <button type="button" id="end" class="primary">Encerrar fase</button>
         </div>
         <div class="row">
+          <button type="button" id="help-btn">Ajuda</button>
+          <button type="button" id="abandon">Abandonar</button>
           <button type="button" id="title">Título</button>
         </div>
         <p id="error" class="error"></p>
-        <p class="help">
-          Setup e reforço: clique num território seu. Ataque e deslocamento: origem e depois destino.
-          Roda do mouse = zoom. Arraste o mapa. Encerrar fase passa reforço → ataques → próximo turno.
-        </p>
         <div id="log" class="log"></div>
+        <p id="log-empty" class="empty" hidden>diário vazio</p>
       </aside>
       <div id="board"></div>
     </div>
@@ -119,7 +124,19 @@
       <div class="sheet">
         <p class="eyebrow">war2</p>
         <h2>Preparando o tabuleiro…</h2>
-        <p id="loading-sub">Carregando mapa e regras.</p>
+        <p id="loading-sub">Embaralhando territórios e posicionando exércitos.</p>
+      </div>
+    </div>
+
+    <div id="help" hidden>
+      <div class="sheet">
+        <p class="eyebrow">ajuda</p>
+        <h2>Como jogar</h2>
+        <p>Setup e reforço: clique num território seu. Ataque e deslocamento: origem e depois destino. Após conquistar, escolha quantas tropas entram (mínimo = dados usados).</p>
+        <p>Roda do mouse = zoom. Arraste o mapa. Esc fecha esta ajuda.</p>
+        <div class="row">
+          <button type="button" id="help-close" class="primary">Fechar</button>
+        </div>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
