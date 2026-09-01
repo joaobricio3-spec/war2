@@ -223,7 +223,7 @@ async function main() {
     ui.trade.disabled = !humanTurn;
 
     if (state.pendingOccupy) {
-      ui.pending.textContent += ` | ocupe ${state.pendingOccupy.to} com 1–${state.pendingOccupy.maxArmies}`;
+      ui.pending.textContent += ` | ocupe ${state.pendingOccupy.to} com ${state.pendingOccupy.minArmies}–${state.pendingOccupy.maxArmies}`;
     }
     updateDice();
     maybeAutoOccupy();

@@ -21,10 +21,10 @@ export function listLegalActions(state: GameState, playerId: PlayerId): Action[]
   }
 
   if (state.pendingOccupy) {
-    const { maxArmies, from } = state.pendingOccupy;
+    const { minArmies, maxArmies, from } = state.pendingOccupy;
     const origin = state.territories[from].armies;
     const max = Math.min(maxArmies, origin - 1);
-    for (let a = 1; a <= max; a++) out.push({ type: "occupy", playerId, armies: a });
+    for (let a = minArmies; a <= max; a++) out.push({ type: "occupy", playerId, armies: a });
     return out;
   }
 

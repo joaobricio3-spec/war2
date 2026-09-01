@@ -56,6 +56,7 @@ export interface OccupiedTerritory {
 export interface PendingOccupy {
   from: import("./map/classic.ts").TerritoryId;
   to: import("./map/classic.ts").TerritoryId;
+  minArmies: number;
   maxArmies: number;
 }
 

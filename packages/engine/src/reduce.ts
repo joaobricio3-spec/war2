@@ -231,7 +231,9 @@ function attack(
     nTo.armies = 0;
     nTo.ownerId = action.playerId;
     next.conqueredThisTurn = true;
-    next.pendingOccupy = { from: action.from, to: action.to, maxArmies: diceN };
+    const maxArmies = nFrom.armies - 1;
+    const minArmies = Math.min(diceN, maxArmies);
+    next.pendingOccupy = { from: action.from, to: action.to, minArmies, maxArmies };
     eliminateIfNeeded(next, victim, action.playerId);
   }
   return { ok: true, state: next };
@@ -242,8 +244,8 @@ function occupy(
   action: Extract<Action, { type: "occupy" }>,
 ): ReduceResult {
   if (state.phase !== "attack" || !state.pendingOccupy) return fail("nada a ocupar");
-  const { from, to, maxArmies } = state.pendingOccupy;
-  if (action.armies < 1 || action.armies > maxArmies) return fail("ocupação fora do intervalo");
+  const { from, to, minArmies, maxArmies } = state.pendingOccupy;
+  if (action.armies < minArmies || action.armies > maxArmies) return fail("ocupação fora do intervalo");
   const next = cloneState(state);
   const origin = next.territories[from];
   if (origin.armies - action.armies < 1) return fail("origem precisa ficar com 1");

@@ -159,6 +159,113 @@ describe("reduce", () => {
     }
   });
 
+  it("rejects occupy below dice used or above origin-1, and leaves ≥1 on origin", () => {
+    let s = dumpAll(finishSetup(game()));
+    const me = s.currentPlayerId;
+    const other = s.playerOrder.find((id) => id !== me)!;
+    s = cloneState(s);
+    s.phase = "attack";
+    s.mustTrade = false;
+    s.pendingOccupy = null;
+    s.territories.brasil = { ownerId: me, armies: 5 };
+    s.territories.venezuela = { ownerId: other, armies: 1 };
+    const crush = {
+      nextInt: (() => {
+        let n = 0;
+        return () => {
+          n += 1;
+          return n <= 3 ? 6 : 1;
+        };
+      })(),
+      shuffle: <T>(x: T[]) => x,
+    };
+    const r = reduce(
+      s,
+      { type: "attack", playerId: me, from: "brasil", to: "venezuela", armies: 3 },
+      crush,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.state.pendingOccupy).toEqual({
+      from: "brasil",
+      to: "venezuela",
+      minArmies: 3,
+      maxArmies: 4,
+    });
+    expect(r.state.territories.brasil.armies).toBe(5);
+
+    const tooFew = reduce(r.state, { type: "occupy", playerId: me, armies: 2 }, crush);
+    expect(tooFew.ok).toBe(false);
+    if (!tooFew.ok) expect(tooFew.error).toBe("ocupação fora do intervalo");
+
+    const tooMany = reduce(r.state, { type: "occupy", playerId: me, armies: 5 }, crush);
+    expect(tooMany.ok).toBe(false);
+    if (!tooMany.ok) expect(tooMany.error).toBe("ocupação fora do intervalo");
+
+    const legal = listLegalActions(r.state, me);
+    expect(legal.every((a) => a.type === "occupy")).toBe(true);
+    expect(legal.filter((a) => a.type === "occupy").map((a) => a.armies)).toEqual([3, 4]);
+
+    const occDice = reduce(r.state, { type: "occupy", playerId: me, armies: 3 }, crush);
+    expect(occDice.ok).toBe(true);
+    if (!occDice.ok) return;
+    expect(occDice.state.territories.venezuela.armies).toBe(3);
+    expect(occDice.state.territories.brasil.armies).toBe(2);
+    expect(occDice.state.territories.brasil.armies).toBeGreaterThanOrEqual(1);
+    expect(occDice.state.pendingOccupy).toBeNull();
+
+    const occMax = reduce(r.state, { type: "occupy", playerId: me, armies: 4 }, crush);
+    expect(occMax.ok).toBe(true);
+    if (!occMax.ok) return;
+    expect(occMax.state.territories.venezuela.armies).toBe(4);
+    expect(occMax.state.territories.brasil.armies).toBe(1);
+  });
+
+  it("caps occupy min at origin-1 when remaining armies are fewer than dice used", () => {
+    let s = dumpAll(finishSetup(game()));
+    const me = s.currentPlayerId;
+    const other = s.playerOrder.find((id) => id !== me)!;
+    s = cloneState(s);
+    s.phase = "attack";
+    s.mustTrade = false;
+    s.pendingOccupy = null;
+    s.territories.brasil = { ownerId: me, armies: 3 };
+    s.territories.venezuela = { ownerId: other, armies: 1 };
+    const crush = {
+      nextInt: (() => {
+        let n = 0;
+        return () => {
+          n += 1;
+          return n <= 3 ? 6 : 1;
+        };
+      })(),
+      shuffle: <T>(x: T[]) => x,
+    };
+    const r = reduce(
+      s,
+      { type: "attack", playerId: me, from: "brasil", to: "venezuela", armies: 3 },
+      crush,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.state.pendingOccupy).toEqual({
+      from: "brasil",
+      to: "venezuela",
+      minArmies: 2,
+      maxArmies: 2,
+    });
+
+    const atDice = reduce(r.state, { type: "occupy", playerId: me, armies: 3 }, crush);
+    expect(atDice.ok).toBe(false);
+    if (!atDice.ok) expect(atDice.error).toBe("ocupação fora do intervalo");
+
+    const occ = reduce(r.state, { type: "occupy", playerId: me, armies: 2 }, crush);
+    expect(occ.ok).toBe(true);
+    if (!occ.ok) return;
+    expect(occ.state.territories.brasil.armies).toBe(1);
+    expect(occ.state.territories.venezuela.armies).toBe(2);
+  });
+
   it("blocks chaining the same armies through two borders in one fortify", () => {
     let s = dumpAll(finishSetup(game()));
     const me = s.currentPlayerId;
