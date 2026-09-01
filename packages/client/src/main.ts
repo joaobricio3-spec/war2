@@ -573,12 +573,23 @@ async function main() {
     if (e.target === ui.help) ui.help.hidden = true;
   });
   window.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
-    if (!ui.help.hidden) {
-      ui.help.hidden = true;
+    if (e.key === "Escape") {
+      if (!ui.help.hidden) {
+        ui.help.hidden = true;
+        return;
+      }
+      if (!ui.gameover.hidden || !ui.overlay.hidden) goToTitle();
       return;
     }
-    if (!ui.gameover.hidden || !ui.overlay.hidden) goToTitle();
+    if (e.key !== " " && e.code !== "Space") return;
+    if (!state || ui.overlay.hidden === false) return;
+    if (mode === "campaign" && (aiThinking || state.currentPlayerId !== humanId)) return;
+    if (state.phase !== "setup_place" && state.phase !== "reinforce") return;
+    e.preventDefault();
+    const me = mode === "net" ? netId : mode === "campaign" ? humanId : state.currentPlayerId;
+    const dests = legalTargets(state, me);
+    const id = selected && dests.has(selected) ? selected : dests.values().next().value;
+    if (id) dispatch({ type: "place", playerId: me, territoryId: id, count: 1 });
   });
 
   document.querySelector("#hotseat")?.addEventListener("click", () => {
