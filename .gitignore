@@ -19,3 +19,5 @@ scripts/__pycache__/
 .worktrees
 worktrees
 tools/mcp-imagine/out/
+tools/overlay-*.png
+tools/crop-*.png
