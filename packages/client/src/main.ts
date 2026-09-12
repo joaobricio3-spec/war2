@@ -1,5 +1,6 @@
 import {
   CONTINENT_BY_ID,
+  TERRITORY_BY_ID,
   aiChooseAction,
   createGame,
   createSeededRng,
@@ -273,7 +274,12 @@ async function main() {
       const b = document.createElement("button");
       b.type = "button";
       b.dataset.card = c.id;
-      b.textContent = c.kind === "joker" ? "coringa" : `${c.territoryId} (${c.shape})`;
+      const image = document.createElement("img");
+      image.src = `/assets/card-${c.shape}.png`;
+      image.alt = "";
+      const label = document.createElement("span");
+      label.textContent = c.kind === "joker" ? "coringa" : TERRITORY_BY_ID[c.territoryId].name;
+      b.append(image, label);
       b.addEventListener("click", () => b.classList.toggle("on"));
       ui.cards.append(b);
     }

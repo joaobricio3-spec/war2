@@ -50,6 +50,7 @@ const test = spawnSync("pnpm", ["--filter", "@war2/engine", "run", "test"], {
   cwd: ROOT,
   stdio: "inherit",
   encoding: "utf8",
+  shell: process.platform === "win32",
 });
 if (test.status !== 0) fail(`engine test suite exited ${test.status}`);
 else ok("engine test suite passed");
