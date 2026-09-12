@@ -23,9 +23,9 @@ from skimage.measure import approximate_polygon, find_contours
 ROOT = Path(__file__).resolve().parents[1]
 BOARD = ROOT / "packages/client/public/assets/world-board-v2.jpg"
 OUT_TS = ROOT / "packages/client/src/layout.ts"
-PREVIEW = Path("/tmp/gauntlet-preview.png")
-LOG = Path("/tmp/gauntlet-score.jsonl")
-GENOME = Path("/tmp/gauntlet-genome.json")
+PREVIEW = ROOT / "tools" / "gauntlet-preview.png"
+LOG = ROOT / "tools" / "gauntlet-score.jsonl"
+GENOME = ROOT / "tools" / "gauntlet-genome.json"
 W, H = 1536, 1024
 
 # Painted continent windows. Islands get their own box so they cannot swallow

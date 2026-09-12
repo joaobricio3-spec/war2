@@ -76,13 +76,17 @@ export function drawCard(state: GameState, playerId: PlayerId, rng: Rng): GameSt
 export function createGame(opts: {
   players: { id: PlayerId; nickname: string; color: ArmyColor }[];
   rng: Rng;
+  firstPlayerId?: PlayerId;
 }): GameState {
   const n = opts.players.length;
   if (n < 2 || n > 6) throw new Error("2 a 6 jogadores");
   const colors = new Set(opts.players.map((p) => p.color));
   if (colors.size !== n) throw new Error("cores devem ser únicas");
 
-  const order = opts.rng.shuffle(opts.players.map((p) => p.id));
+  let order = opts.rng.shuffle(opts.players.map((p) => p.id));
+  if (opts.firstPlayerId && order.includes(opts.firstPlayerId)) {
+    order = [opts.firstPlayerId, ...order.filter((id) => id !== opts.firstPlayerId)];
+  }
   const ids = opts.rng.shuffle([...TERRITORY_IDS]);
   const ownerOf: Record<TerritoryId, PlayerId> = {} as Record<TerritoryId, PlayerId>;
   ids.forEach((tid, i) => {

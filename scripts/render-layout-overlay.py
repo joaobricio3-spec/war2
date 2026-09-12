@@ -62,10 +62,21 @@ for tid, pts in polys.items():
     d.text((cx + 6, cy - 6), tid, fill=(255, 255, 255, 255), font=font,
            stroke_width=2, stroke_fill=(0, 0, 0, 255))
 
+W = img.size[0]
 for a, b in lanes:
     if a in polys and b in polys:
         pa, pb = anchor_of(a, polys[a]), anchor_of(b, polys[b])
-        d.line([pa, pb], fill=(80, 220, 255, 220), width=2)
+        if abs(pb[0] - pa[0]) > W / 2:
+            # Cross-map wrap: edge stubs, matching board.ts.
+            left, right = (pa, pb) if pa[0] < pb[0] else (pb, pa)
+            d.line([left, (left[0] - 60, left[1] - 10), (-14, left[1] - 22)],
+                   fill=(80, 220, 255, 220), width=2)
+            d.line([right, (right[0] + 60, right[1] - 10), (W + 14, right[1] - 22)],
+                   fill=(80, 220, 255, 220), width=2)
+        else:
+            mx = (pa[0] + pb[0]) / 2
+            my = (pa[1] + pb[1]) / 2 - 36
+            d.line([pa, (mx, my), pb], fill=(80, 220, 255, 220), width=2)
 
 img.paste(Image.alpha_composite(img.convert("RGBA"), lay).convert("RGB"), (0, 0))
 img.save(out)

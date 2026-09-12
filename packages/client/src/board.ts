@@ -78,10 +78,21 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   for (const [a, b] of SEA_LANES) {
     const pa = LAYOUT_BY_ID[a];
     const pb = LAYOUT_BY_ID[b];
-    const mx = (pa.cx + pb.cx) / 2;
-    const my = (pa.cy + pb.cy) / 2 - 36;
-    lanes.moveTo(pa.cx, pa.cy);
-    lanes.quadraticCurveTo(mx, my, pb.cx, pb.cy);
+    if (Math.abs(pb.cx - pa.cx) > WORLD.width / 2) {
+      // Cross-map link (Alaska↔Vladivostok wraps the Pacific): draw short
+      // stubs toward each edge instead of a line across the whole board.
+      const left = pa.cx < pb.cx ? pa : pb;
+      const right = pa.cx < pb.cx ? pb : pa;
+      lanes.moveTo(left.cx, left.cy);
+      lanes.quadraticCurveTo(left.cx - 60, left.cy - 10, -14, left.cy - 22);
+      lanes.moveTo(right.cx, right.cy);
+      lanes.quadraticCurveTo(right.cx + 60, right.cy - 10, WORLD.width + 14, right.cy - 22);
+    } else {
+      const mx = (pa.cx + pb.cx) / 2;
+      const my = (pa.cy + pb.cy) / 2 - 36;
+      lanes.moveTo(pa.cx, pa.cy);
+      lanes.quadraticCurveTo(mx, my, pb.cx, pb.cy);
+    }
   }
   lanes.stroke({ width: 2, color: 0xc4a35a, alpha: 0.55 });
 
@@ -120,9 +131,10 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
       style: {
         fontFamily: 'Figtree, Candara, "Segoe UI", sans-serif',
         fontSize: 11,
-        fill: 0xd9d4c8,
+        fill: 0xf4f1ea,
         align: "center",
-        fontWeight: "600",
+        fontWeight: "700",
+        stroke: { color: 0x090b0e, width: 3, join: "round" },
       },
     });
     name.anchor.set(0.5, 1);
@@ -147,12 +159,22 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     cells.set(l.id, { glow, name, disc, count });
   }
 
+  let fitScale = 1;
+  const clampPan = () => {
+    // Always keep at least KEEP px of the board reachable on screen.
+    const KEEP = 160;
+    const w = WORLD.width * world.scale.x;
+    const h = WORLD.height * world.scale.y;
+    baseX = Math.min(app.screen.width - KEEP, Math.max(KEEP - w, baseX));
+    baseY = Math.min(app.screen.height - KEEP, Math.max(KEEP - h, baseY));
+  };
   const fitWorld = () => {
     const sx = app.screen.width / WORLD.width;
     const sy = app.screen.height / WORLD.height;
     // Contain (min) so all 42 territories stay on-screen; cover cropped the
     // Americas off a tall board and hid the stack the player just placed.
     const s = Math.min(sx, sy);
+    fitScale = s;
     world.scale.set(s);
     baseX = (app.screen.width - WORLD.width * s) / 2;
     baseY = (app.screen.height - WORLD.height * s) / 2;
@@ -184,9 +206,11 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   let dragging = false;
   let lx = 0;
   let ly = 0;
+  let dragDist = 0;
   app.canvas.addEventListener("pointerdown", (e) => {
     dragging = true;
     panned = false;
+    dragDist = 0;
     lx = e.clientX;
     ly = e.clientY;
   });
@@ -197,23 +221,40 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     if (!dragging) return;
     const dx = e.clientX - lx;
     const dy = e.clientY - ly;
-    if (!panned && dx * dx + dy * dy < 36) return;
+    lx = e.clientX;
+    ly = e.clientY;
+    // Cumulative threshold: a slow drag pans instead of teleporting the map
+    // by the whole accumulated delta once the threshold trips.
+    dragDist += Math.hypot(dx, dy);
+    if (!panned && dragDist < 6) return;
     panned = true;
     baseX += dx;
     baseY += dy;
+    clampPan();
     applyWorldPos();
-    lx = e.clientX;
-    ly = e.clientY;
   });
   app.canvas.addEventListener(
     "wheel",
     (e) => {
       e.preventDefault();
-      const scale = Math.min(3.2, Math.max(0.35, world.scale.x * (e.deltaY > 0 ? 0.92 : 1.08)));
-      world.scale.set(scale);
+      const s0 = world.scale.x;
+      const s1 = Math.min(3.2, Math.max(fitScale, s0 * (e.deltaY > 0 ? 0.92 : 1.08)));
+      if (s1 === s0) return;
+      // Anchor the zoom at the cursor: the world point under the pointer
+      // must stay under the pointer after scaling.
+      const rect = app.canvas.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const k = s1 / s0;
+      baseX = px - (px - baseX) * k;
+      baseY = py - (py - baseY) * k;
+      world.scale.set(s1);
+      clampPan();
+      applyWorldPos();
     },
     { passive: false },
   );
+  app.canvas.addEventListener("dblclick", () => fitWorld());
 
   function render(
     state: GameState,
@@ -233,11 +274,13 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
 
       cell.glow.clear();
       cell.glow.poly(l.poly);
-      cell.glow.fill({ color: fill, alpha: on ? 0.46 : target ? 0.34 : 0.16 });
+      cell.glow.fill({ color: fill, alpha: on ? 0.5 : target ? 0.38 : 0.16 });
       cell.glow.poly(l.poly);
       cell.glow.stroke({
-        width: on || target ? 2.5 : 1.4,
-        color: on || target ? 0xf0c987 : 0x1c140c,
+        // Selected origin is warm gold; legal destinations are cool cyan so
+        // "o que é origem" e "para onde posso ir" não se confundem.
+        width: on ? 3 : target ? 2.5 : 1.4,
+        color: on ? 0xffd76a : target ? 0x6ec6ff : 0x1c140c,
         alpha: on || target ? 0.95 : 0.55,
       });
 
@@ -259,5 +302,5 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     trauma = Math.min(1, trauma + amount);
   }
 
-  return { render, fps, shake, app };
+  return { render, fps, shake, resetView: fitWorld, app };
 }

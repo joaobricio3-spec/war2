@@ -45,25 +45,43 @@ if (!existsSync(join(engineSrc, "gate.test.ts"))) {
   ok("gate.test.ts present");
 }
 
-console.log("\n--- running engine test suite (pnpm --filter @war2/engine test) ---");
-const test = spawnSync("pnpm", ["--filter", "@war2/engine", "run", "test"], {
+console.log("\n--- running test suites (engine + server) ---");
+for (const pkg of ["@war2/engine", "@war2/server"]) {
+  const test = spawnSync("pnpm", ["--filter", pkg, "run", "test"], {
+    cwd: ROOT,
+    stdio: "inherit",
+    encoding: "utf8",
+    shell: process.platform === "win32",
+  });
+  if (test.status !== 0) fail(`${pkg} test suite exited ${test.status}`);
+  else ok(`${pkg} test suite passed`);
+}
+
+console.log("\n--- running typecheck (pnpm -r typecheck) ---");
+const tsc = spawnSync("pnpm", ["-r", "--if-present", "typecheck"], {
   cwd: ROOT,
   stdio: "inherit",
   encoding: "utf8",
   shell: process.platform === "win32",
 });
-if (test.status !== 0) fail(`engine test suite exited ${test.status}`);
-else ok("engine test suite passed");
+if (tsc.status !== 0) fail(`typecheck exited ${tsc.status}`);
+else ok("typecheck passed");
 
-// 3. No 30fps cap and no camera game-loop on setInterval.
-console.log("\n--- static checks (fps cap / camera loop) ---");
+// 3. No fps cap, no Math.random in the engine, no camera game-loop on
+//    setInterval.
+console.log("\n--- static checks (fps cap / engine RNG / camera loop) ---");
 const allSrc = readAllFiles(join(ROOT, "packages"), [".ts", ".tsx"]).filter(
   (f) => !f.endsWith(".test.ts"),
 );
-const capRe = /maxFPS\s*[:=]\s*30\b/;
+const capRe = /\b(?:maxFPS|minFPS|targetFPS)\s*[:=]\s*(?!0\b)\d+/;
 const capHits = allSrc.filter((f) => capRe.test(readFileSync(f, "utf8")));
-if (capHits.length) fail(`maxFPS capped to 30 in: ${capHits.map((f) => f.replace(ROOT + "/", "")).join(", ")}`);
-else ok("no maxFPS = 30 cap");
+if (capHits.length) fail(`fps capped in: ${capHits.map((f) => f.replace(ROOT + "/", "")).join(", ")}`);
+else ok("no fps cap");
+
+const engineCode = readAllFiles(engineSrc, [".ts"]).filter((f) => !f.endsWith(".test.ts"));
+const rngHits = engineCode.filter((f) => /Math\.random\s*\(/.test(readFileSync(f, "utf8")));
+if (rngHits.length) fail(`Math.random in engine: ${rngHits.map((f) => f.replace(ROOT + "/", "")).join(", ")}`);
+else ok("no Math.random in engine");
 
 const clientSrc = allSrc.filter((f) => f.includes("packages/client/src"));
 const intervalRe = /\bsetInterval\s*\(/;

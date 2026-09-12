@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_TS = ROOT / "packages/client/src/layout.ts"
-PREVIEW = Path("/tmp/layout-preview.png")
+PREVIEW = ROOT / "tools" / "layout-preview.png"
 BOARD = ROOT / "packages/client/public/assets/world-board.jpg"
 W, H = 1536, 1024
 

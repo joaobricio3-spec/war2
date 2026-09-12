@@ -113,7 +113,8 @@ function place(
   state: GameState,
   action: Extract<Action, { type: "place" }>,
 ): ReduceResult {
-  if (action.count < 1) return fail("count < 1");
+  if (!TERRITORY_BY_ID[action.territoryId]) return fail("território desconhecido");
+  if (!Number.isInteger(action.count) || action.count < 1) return fail("count inválido");
   const next = cloneState(state);
 
   if (next.phase === "setup_place") {
@@ -157,6 +158,7 @@ function trade(
   }
   const next = cloneState(state);
   const player = next.players.find((p) => p.id === action.playerId)!;
+  if (!Array.isArray(action.cardIds)) return fail("cartas inválidas");
   const selected = action.cardIds.map((id) => player.cards.find((c) => c.id === id));
   if (selected.some((c) => !c) || new Set(action.cardIds).size !== 3) {
     return fail("3 cartas próprias");
@@ -204,11 +206,12 @@ function attack(
   rng: Rng,
 ): ReduceResult {
   if (state.mustTrade) return fail("troca obrigatória");
-  if (state.phase === "reinforce" && pendingPlaceTotal(state.armiesToPlace) === 0 && !state.mustTrade) {
-    /* allow implicit? no, must endReinforce */
-  }
   if (state.phase !== "attack") return fail("não é fase de ataque");
   if (state.pendingOccupy) return fail("ocupe o território conquistado");
+  if (!TERRITORY_BY_ID[action.from] || !TERRITORY_BY_ID[action.to]) {
+    return fail("território desconhecido");
+  }
+  if (!Number.isInteger(action.armies)) return fail("armies inválido");
 
   const from = state.territories[action.from];
   const to = state.territories[action.to];
@@ -261,6 +264,7 @@ function occupy(
 ): ReduceResult {
   if (state.phase !== "attack" || !state.pendingOccupy) return fail("nada a ocupar");
   const { from, to, minArmies, maxArmies } = state.pendingOccupy;
+  if (!Number.isInteger(action.armies)) return fail("armies inválido");
   if (action.armies < minArmies || action.armies > maxArmies) return fail("ocupação fora do intervalo");
   const next = cloneState(state);
   const origin = next.territories[from];
@@ -288,8 +292,11 @@ function fortify(
   }
   if (state.phase !== "fortify") return fail("não é deslocamento");
   if (state.fortifiedThisTurn) return fail("só um deslocamento por turno");
-  if (action.armies < 1) return fail("armies < 1");
+  if (!Number.isInteger(action.armies) || action.armies < 1) return fail("armies inválido");
   if (action.from === action.to) return fail("origem e destino iguais");
+  if (!TERRITORY_BY_ID[action.from] || !TERRITORY_BY_ID[action.to]) {
+    return fail("território desconhecido");
+  }
   const from = state.territories[action.from];
   const to = state.territories[action.to];
   if (from.ownerId !== action.playerId || to.ownerId !== action.playerId) {

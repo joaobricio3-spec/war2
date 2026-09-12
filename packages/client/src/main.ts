@@ -14,7 +14,7 @@ import {
   type PlayerId,
   type TerritoryId,
 } from "@war2/engine";
-import type { C2S, S2C } from "@war2/shared";
+import { DEFAULT_WS_PATH, DEFAULT_WS_PORT, type C2S, type S2C } from "@war2/shared";
 import { createBoard } from "./board.ts";
 import { showBattle } from "./dice.ts";
 
@@ -49,6 +49,12 @@ const ui = {
   log: document.querySelector("#log") as HTMLElement,
   logEmpty: document.querySelector("#log-empty") as HTMLElement,
   error: document.querySelector("#error") as HTMLElement,
+  roster: document.querySelector("#roster") as HTMLElement,
+  lobby: document.querySelector("#lobby") as HTMLElement,
+  lobbyCode: document.querySelector("#lobby-code") as HTMLElement,
+  lobbyPlayers: document.querySelector("#lobby-players") as HTMLElement,
+  lobbyHint: document.querySelector("#lobby-hint") as HTMLElement,
+  startnet: document.querySelector("#startnet") as HTMLButtonElement,
   overlay: document.querySelector("#overlay") as HTMLElement,
   gameover: document.querySelector("#gameover") as HTMLElement,
   gameoverTitle: document.querySelector("#gameover-title") as HTMLElement,
@@ -58,6 +64,7 @@ const ui = {
   trade: document.querySelector("#trade") as HTMLButtonElement,
   end: document.querySelector("#end") as HTMLButtonElement,
   continue: document.querySelector("#continue") as HTMLButtonElement,
+  resume: document.querySelector("#resume") as HTMLButtonElement,
 };
 
 function describeObjective(state: GameState, id: PlayerId): string {
@@ -93,20 +100,24 @@ function log(line: string) {
   ui.log.prepend(p);
 }
 
+function tName(id: TerritoryId): string {
+  return TERRITORY_BY_ID[id]?.name ?? id;
+}
+
 function describeAction(a: Action): string {
   switch (a.type) {
     case "place":
-      return `posicionou +${a.count} em ${a.territoryId}`;
+      return `posicionou +${a.count} em ${tName(a.territoryId)}`;
     case "trade":
       return "troca de cartas";
     case "endReinforce":
       return "encerrou o reforço";
     case "attack":
-      return `ataque ${a.from} → ${a.to}`;
+      return `ataque ${tName(a.from)} → ${tName(a.to)}`;
     case "occupy":
       return `ocupou com ${a.armies}`;
     case "fortify":
-      return `deslocou ${a.armies}: ${a.from} → ${a.to}`;
+      return `deslocou ${a.armies}: ${tName(a.from)} → ${tName(a.to)}`;
     case "endTurn":
       return "passou o turno";
     default:
@@ -125,6 +136,7 @@ async function main() {
   let token = "";
   let roomCode = "";
   let netId: PlayerId = "";
+  let netHost = false;
 
   // campaign state
   let humanId: PlayerId = "p1";
@@ -135,6 +147,14 @@ async function main() {
   let cancelDice: () => void = () => {};
 
   ui.continue.disabled = loadCampaign() === null;
+
+  // Default WS URL follows the page host: LAN friends join the same machine,
+  // and a deployed build no longer points at the visitor's own localhost.
+  const wsInput = document.querySelector("#ws") as HTMLInputElement;
+  if (!wsInput.value) {
+    const scheme = location.protocol === "https:" ? "wss" : "ws";
+    wsInput.value = `${scheme}://${location.hostname}:${DEFAULT_WS_PORT}${DEFAULT_WS_PATH}`;
+  }
 
   const board = await createBoard(canvasHost, {
     onTerritory(id) {
@@ -198,6 +218,11 @@ async function main() {
     }
     const hits = state.lastBattle.attackLosses + state.lastBattle.defendLosses;
     board.shake(0.28 + 0.14 * hits);
+    const b = state.lastBattle;
+    log(
+      `dados ${b.attackDice.join("·")} vs ${b.defendDice.join("·")} — ` +
+        `atacante perde ${b.attackLosses}, defensor perde ${b.defendLosses}`,
+    );
     cancelDice = showBattle(ui.dice, state.lastBattle);
   }
 
@@ -228,44 +253,51 @@ async function main() {
   }
 
   function paint() {
-    if (!state) return;
+    const s = state;
+    if (!s) return;
     const me =
       mode === "net"
-        ? netId || state.currentPlayerId
-          : mode === "campaign"
-            ? humanId
-            : state.currentPlayerId;
+        ? netId || s.currentPlayerId
+        : mode === "campaign"
+          ? humanId
+          : s.currentPlayerId;
     viewer = me;
-    board.render(state, selected, me, legalTargets(state, me));
-    const p = state.players.find((pl) => pl.id === me);
-    ui.phase.textContent = state.phase;
-    ui.turn.textContent = `${p?.nickname ?? me} (${p?.color ?? ""})`;
-    ui.objective.textContent = describeObjective(state, me);
+    board.render(s, selected, me, legalTargets(s, me));
+    const p = s.players.find((pl) => pl.id === me);
+    const cur = s.players.find((pl) => pl.id === s.currentPlayerId);
+    ui.phase.textContent = s.phase;
+    ui.turn.textContent = `${cur?.nickname ?? s.currentPlayerId} (${cur?.color ?? ""})`;
+    ui.objective.textContent = describeObjective(s, me);
     ui.pending.textContent =
-      state.phase === "setup_place"
+      s.phase === "setup_place"
         ? `setup: restam ${p?.setupRemaining ?? 0} tropas`
-        : `pendentes: ${pendingPlaceTotal(state.armiesToPlace)} | troca obrigatória: ${state.mustTrade ? "sim" : "não"}`;
+        : `pendentes: ${pendingPlaceTotal(s.armiesToPlace)} | troca obrigatória: ${s.mustTrade ? "sim" : "não"}`;
 
-    if (mode === "campaign") {
-      ui.status.hidden = false;
-      if (state.phase === "over") {
-        ui.status.textContent = state.winnerId === humanId ? "Vitória" : "Derrota";
-        ui.status.dataset.tone = state.winnerId === humanId ? "win" : "lose";
-      } else if (state.phase === "setup_place" && state.currentPlayerId === humanId) {
-        ui.status.textContent = `Setup — posicione 1 tropa (restam ${p?.setupRemaining ?? 0})`;
-        ui.status.dataset.tone = "you";
-      } else if (state.currentPlayerId === humanId) {
-        ui.status.textContent = "Sua vez";
-        ui.status.dataset.tone = "you";
-      } else {
-        const curId = state.currentPlayerId;
-        const cur = state.players.find((pl) => pl.id === curId);
-        ui.status.textContent = `IA pensando — ${cur?.nickname ?? curId}`;
-        ui.status.dataset.tone = "ai";
-      }
+    ui.status.hidden = false;
+    const myTurn = s.currentPlayerId === me;
+    if (s.phase === "over") {
+      const winner = s.players.find((pl) => pl.id === s.winnerId);
+      const iWon = mode === "hotseat" ? false : s.winnerId === me;
+      ui.status.textContent = iWon
+        ? "Vitória"
+        : `Fim de jogo — venceu ${winner?.nickname ?? "?"}`;
+      ui.status.dataset.tone = iWon ? "win" : "lose";
+    } else if (s.phase === "setup_place" && myTurn) {
+      ui.status.textContent = `Setup — posicione 1 tropa (restam ${p?.setupRemaining ?? 0})`;
+      ui.status.dataset.tone = "you";
+    } else if (myTurn) {
+      ui.status.textContent =
+        mode === "net" || mode === "campaign" ? "Sua vez" : `Vez de ${cur?.nickname ?? me}`;
+      ui.status.dataset.tone = "you";
+    } else if (mode === "campaign") {
+      ui.status.textContent = `IA pensando — ${cur?.nickname ?? s.currentPlayerId}`;
+      ui.status.dataset.tone = "ai";
     } else {
-      ui.status.hidden = true;
+      ui.status.textContent = `Vez de ${cur?.nickname ?? s.currentPlayerId}`;
+      ui.status.dataset.tone = "ai";
     }
+
+    paintRoster(s, me);
 
     const mineCards = p?.cards ?? [];
     ui.cards.innerHTML = "";
@@ -285,18 +317,57 @@ async function main() {
     }
 
     const humanTurn =
-      mode !== "campaign" || (state.currentPlayerId === humanId && !aiThinking && state.phase !== "over");
-    ui.end.disabled = !humanTurn || !!state.pendingOccupy || state.phase === "setup_place";
-    ui.trade.disabled = !humanTurn || state.phase === "setup_place";
-    if (state.phase === "setup_place") ui.end.textContent = "Posicione tropas";
-    else if (state.phase === "reinforce") ui.end.textContent = "Encerrar reforço";
-    else if (state.phase === "attack") ui.end.textContent = "Ir ao deslocamento";
-    else if (state.phase === "fortify") ui.end.textContent = "Passar o turno";
+      mode !== "campaign" ||
+      (s.currentPlayerId === humanId && !aiThinking && s.phase !== "over");
+    ui.end.disabled = !humanTurn || !!s.pendingOccupy || s.phase === "setup_place";
+    ui.trade.disabled = !humanTurn || s.phase === "setup_place";
+    if (s.phase === "setup_place") ui.end.textContent = "Posicione tropas";
+    else if (s.phase === "reinforce") ui.end.textContent = "Encerrar reforço";
+    else if (s.phase === "attack") ui.end.textContent = "Ir ao deslocamento";
+    else if (s.phase === "fortify") ui.end.textContent = "Passar o turno";
     else ui.end.textContent = "Encerrar fase";
 
-    paintOccupy(state, me);
+    paintOccupy(s, me);
     ui.logEmpty.hidden = ui.log.childElementCount > 0;
     updateDice();
+  }
+
+  function paintRoster(s: GameState, me: PlayerId) {
+    ui.roster.innerHTML = "";
+    for (const p of s.players) {
+      const li = document.createElement("li");
+      const territories = Object.values(s.territories).filter(
+        (t) => t.ownerId === p.id,
+      ).length;
+      li.dataset.color = p.color;
+      if (p.id === s.currentPlayerId) li.dataset.turn = "1";
+      if (!p.alive) li.dataset.dead = "1";
+      const who = p.id === me && mode !== "hotseat" ? `${p.nickname} (você)` : p.nickname;
+      li.innerHTML = `<i></i><span></span><em>${territories}t · ${p.cards.length}c</em>`;
+      li.querySelector("span")!.textContent = who;
+      ui.roster.append(li);
+    }
+  }
+
+  function updateLobby(players?: { nickname: string; connected: boolean }[]) {
+    if (mode !== "net" || !roomCode || (state && state.phase !== "over")) {
+      ui.lobby.hidden = true;
+      return;
+    }
+    ui.lobby.hidden = false;
+    ui.lobbyCode.textContent = roomCode;
+    if (players) {
+      ui.lobbyPlayers.innerHTML = "";
+      for (const p of players) {
+        const li = document.createElement("li");
+        li.textContent = p.nickname + (p.connected ? "" : " (offline)");
+        ui.lobbyPlayers.append(li);
+      }
+    }
+    ui.startnet.disabled = !netHost;
+    ui.lobbyHint.textContent = netHost
+      ? "Você é o host — inicie quando todos entrarem."
+      : "Aguardando o host iniciar…";
   }
 
   function paintOccupy(s: GameState, me: PlayerId) {
@@ -349,7 +420,8 @@ async function main() {
     applyLocal(action);
     if (ui.error.textContent === "") log(describeAction(action));
     paint();
-    if (mode === "campaign") maybeRunAI();
+    if (state?.phase === "over") onGameOver();
+    else if (mode === "campaign") maybeRunAI();
   }
 
   function saveCampaign() {
@@ -434,16 +506,23 @@ async function main() {
 
   function onGameOver() {
     stopAI();
-    if (!state) return;
-    localStorage.removeItem(SAVE_KEY);
-    ui.continue.disabled = true;
-    const won = state.winnerId === humanId;
-    const winnerId = state.winnerId;
-    const winner = state.players.find((p) => p.id === winnerId);
-    ui.gameoverTitle.textContent = won ? "Vitória" : "Derrota";
+    const s = state;
+    if (!s) return;
+    if (mode === "campaign") {
+      localStorage.removeItem(SAVE_KEY);
+      ui.continue.disabled = true;
+    }
+    const me = mode === "net" ? netId : mode === "campaign" ? humanId : "";
+    const won = me !== "" && s.winnerId === me;
+    const winner = s.players.find((p) => p.id === s.winnerId);
+    ui.gameoverTitle.textContent = won
+      ? "Vitória"
+      : mode === "hotseat"
+        ? "Fim de jogo"
+        : "Derrota";
     ui.gameoverSub.textContent = won
       ? "Você cumpriu o objetivo."
-      : `Campanha encerrada. Venceu ${winner?.nickname ?? "?"}.`;
+      : `Venceu ${winner?.nickname ?? "?"}.`;
     ui.gameover.hidden = false;
     paint();
   }
@@ -470,15 +549,14 @@ async function main() {
     aiPlayers = new Map(players.slice(1).map((p) => [p.id, diff] as [PlayerId, Difficulty]));
     ws?.close();
     ws = null;
+    roomCode = "";
+    netHost = false;
 
     ui.overlay.hidden = true;
     ui.loading.hidden = false;
     window.setTimeout(() => {
-      let s = createGame({ players, rng });
       // Campaign: human places first in setup and takes turn 1 after it.
-      const rest = s.playerOrder.filter((id) => id !== humanId);
-      s = { ...s, playerOrder: [humanId, ...rest], currentPlayerId: humanId };
-      state = s;
+      state = createGame({ players, rng, firstPlayerId: humanId });
       selected = null;
       lastBattleKey = "x";
       ui.log.innerHTML = "";
@@ -522,7 +600,9 @@ async function main() {
     ui.loading.hidden = true;
     ui.help.hidden = true;
     ui.continue.disabled = loadCampaign() === null;
+    ui.resume.hidden = !state || state.phase === "over";
     ui.overlay.hidden = false;
+    updateLobby();
   }
 
   function abandonCampaign() {
@@ -566,6 +646,11 @@ async function main() {
     startCampaign(n, diff);
   });
   ui.continue.addEventListener("click", () => continueCampaign());
+  ui.resume.addEventListener("click", () => {
+    ui.overlay.hidden = true;
+    paint();
+    if (mode === "campaign") maybeRunAI();
+  });
   document.querySelector("#title")?.addEventListener("click", () => goToTitle());
   document.querySelector("#abandon")?.addEventListener("click", () => abandonCampaign());
   document.querySelector("#gameover-title-btn")?.addEventListener("click", () => goToTitle());
@@ -584,7 +669,17 @@ async function main() {
         ui.help.hidden = true;
         return;
       }
-      if (!ui.gameover.hidden || !ui.overlay.hidden) goToTitle();
+      if (!ui.gameover.hidden) {
+        goToTitle();
+        return;
+      }
+      if (!ui.overlay.hidden) return;
+      if (selected) {
+        selected = null;
+        paint();
+        return;
+      }
+      board.resetView();
       return;
     }
     if (e.key !== " " && e.code !== "Space") return;
@@ -611,6 +706,8 @@ async function main() {
     sessionStorage.removeItem("war2");
     const old = ws;
     ws = null;
+    roomCode = "";
+    netHost = false;
     old?.close();
     state = createGame({ players, rng });
     selected = null;
@@ -662,29 +759,38 @@ async function main() {
         token = msg.token;
         roomCode = msg.roomCode;
         netId = msg.playerId;
+        netHost = msg.host;
         mode = "net";
         state = msg.state;
+        ui.error.textContent = "";
         sessionStorage.setItem("war2", JSON.stringify({ token, roomCode, url }));
         log(`sala ${roomCode}`);
         if (msg.state) {
           hideOverlays();
           paint();
+        } else {
+          updateLobby(msg.players);
         }
         return;
       }
       if (msg.type === "room") {
+        netHost = msg.host;
         if (msg.state) {
           state = msg.state;
+          ui.error.textContent = "";
           hideOverlays();
           paint();
+        } else {
+          updateLobby(msg.players);
         }
-        log(msg.players.map((p) => p.nickname).join(", "));
         return;
       }
       if (msg.type === "state") {
         state = msg.state;
+        ui.error.textContent = "";
         hideOverlays();
         paint();
+        if (state.phase === "over") onGameOver();
       }
     });
     previous?.close();
@@ -706,7 +812,11 @@ async function main() {
     connect(url, { type: "join", roomCode: code, nickname: nick });
   });
   document.querySelector("#startnet")?.addEventListener("click", () => {
-    ws?.send(JSON.stringify({ type: "start" } satisfies C2S));
+    if (ws?.readyState !== WebSocket.OPEN) {
+      ui.error.textContent = "sem conexão";
+      return;
+    }
+    ws.send(JSON.stringify({ type: "start" } satisfies C2S));
   });
 
   const saved = sessionStorage.getItem("war2");

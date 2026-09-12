@@ -27,6 +27,7 @@
           <dt>reforço</dt>
           <dd id="pending">—</dd>
         </dl>
+        <ul id="roster" class="roster"></ul>
         <div id="dice" class="dice" hidden></div>
         <div id="occupy" class="occupy" hidden>
           <p class="occupy-label">Conquista — mova tropas</p>
@@ -80,6 +81,7 @@
         <div class="row">
           <button type="button" id="campaign" class="primary">Nova campanha</button>
           <button type="button" id="continue" disabled>Continuar campanha</button>
+          <button type="button" id="resume" hidden>Voltar ao jogo</button>
         </div>
 
         <hr />
@@ -98,12 +100,21 @@
           <button type="button" id="hotseat">Jogar no mesmo PC</button>
           <hr />
           <label>Apelido <input id="nick" placeholder="General" /></label>
-          <label>WebSocket <input id="ws" value="ws://localhost:8787/ws" /></label>
+          <label>WebSocket <input id="ws" placeholder="ws://host:8787/ws" /></label>
           <label>Código <input id="code" placeholder="ABC123" maxlength="6" /></label>
           <div class="row">
             <button type="button" id="create">Criar sala</button>
             <button type="button" id="join">Entrar</button>
-            <button type="button" id="startnet">Iniciar partida</button>
+          </div>
+          <div id="lobby" class="lobby" hidden>
+            <p class="lobby-code">
+              Sala <b id="lobby-code">—</b> — compartilhe o código com os amigos
+            </p>
+            <ul id="lobby-players"></ul>
+            <button type="button" id="startnet" class="primary" disabled>
+              Iniciar partida
+            </button>
+            <p id="lobby-hint" class="hint">Aguardando o host iniciar…</p>
           </div>
         </details>
       </div>
