@@ -201,6 +201,53 @@ describe("friend rooms", () => {
     await new Promise<void>((resolve) => wss.close(() => resolve()));
   });
 
+  it("rejects join into an active game but keeps the seat for reconnect", async () => {
+    const wss = startServer(0);
+    const port = (wss.address() as { port: number }).port;
+    const url = `ws://127.0.0.1:${port}/ws`;
+
+    const host = new WebSocket(url);
+    await new Promise((r) => host.once("open", r));
+    host.send(JSON.stringify({ type: "create", nickname: "Ana" }));
+    const welcome = await onceMessage(host);
+    if (welcome.type !== "welcome") throw new Error("no welcome");
+
+    const guest = await joinRoom(url, welcome.roomCode, "Bia");
+    if (guest.welcome.type !== "welcome") throw new Error("no welcome");
+
+    host.send(JSON.stringify({ type: "start" }));
+    await waitFor(host, (m) => m.type === "state");
+
+    // A fresh socket cannot join mid-game…
+    const late = await joinRoom(url, welcome.roomCode, "Clo");
+    expect(late.welcome.type).toBe("error");
+    if (late.welcome.type === "error")
+      expect(late.welcome.message).toMatch(/já começou|reconnect/i);
+
+    // …but the disconnected seat still accepts its token.
+    const seat = new WebSocket(url);
+    await new Promise((r) => seat.once("open", r));
+    seat.send(
+      JSON.stringify({
+        type: "reconnect",
+        roomCode: welcome.roomCode,
+        token: guest.welcome.token,
+      }),
+    );
+    const re = await onceMessage(seat);
+    expect(re.type).toBe("welcome");
+    if (re.type === "welcome") {
+      expect(re.playerId).toBe(guest.welcome.playerId);
+      expect(re.state?.players).toHaveLength(2);
+    }
+
+    host.close();
+    guest.ws.close();
+    seat.close();
+    late.ws.close();
+    await new Promise<void>((resolve) => wss.close(() => resolve()));
+  });
+
   it("leave frees the seat, migrates host, and empties the room", async () => {
     const wss = startServer(0);
     const port = (wss.address() as { port: number }).port;
