@@ -10,7 +10,7 @@
     <div id="app">
       <aside class="panel">
         <p class="eyebrow">war2 · tabuleiro aberto</p>
-        <h1>Mesa</h1>
+        <img class="logo" src="/assets/logo.png" alt="War2" />
         <p id="fps" class="fps">— fps</p>
         <dl>
           <dt>fase</dt>
@@ -28,6 +28,7 @@
           <button type="button" id="end" class="primary">Encerrar fase</button>
         </div>
         <p id="error" class="error"></p>
+        <div id="dice" class="dice"></div>
         <p class="help">
           Setup e reforço: clique num território seu. Ataque e deslocamento: origem e depois destino.
           Roda do mouse = zoom. Arraste o mapa. Encerrar fase passa reforço → ataques → próximo turno.
@@ -39,6 +40,7 @@
 
     <div id="overlay">
       <div class="sheet">
+        <img class="logo logo--sheet" src="/assets/logo.png" alt="War2" />
         <h2>Sentar à mesa</h2>
         <p>Mesmo PC, ou uma sala com código de seis caracteres. Sem ranking, sem energia.</p>
         <label>

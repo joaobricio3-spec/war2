@@ -29,6 +29,18 @@ h2 {
   margin: 0 0 0.35rem;
 }
 
+.logo {
+  display: block;
+  width: 100%;
+  max-width: 14rem;
+  margin: 0.2rem 0 0.6rem;
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.6));
+}
+
+.logo--sheet {
+  margin: 0 auto 0.8rem;
+}
+
 #app {
   display: grid;
   grid-template-columns: minmax(16rem, 20rem) 1fr;
@@ -96,11 +108,25 @@ dd {
 }
 
 .cards button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  width: 5.2rem;
   font: inherit;
   background: color-mix(in srgb, var(--ink) 55%, transparent);
   color: var(--vellum);
   border: 1px solid var(--brass);
-  padding: 0.28rem 0.5rem;
+  padding: 0.35rem 0.25rem;
+  font-size: 0.7rem;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.cards button img {
+  width: 2.6rem;
+  height: 2.6rem;
+  object-fit: contain;
 }
 
 .cards button.on {
@@ -143,6 +169,44 @@ button.primary {
 .error {
   color: #e39a8a;
   min-height: 1.2em;
+}
+
+.dice {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  min-height: 2.4rem;
+  margin: 0.3rem 0;
+}
+
+.die {
+  position: relative;
+  width: 2.2rem;
+  height: 2.2rem;
+  background-size: contain;
+  background-repeat: no-repeat;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+  font-family: Georgia, serif;
+}
+
+.die--att {
+  background-image: url(/assets/die-red.png);
+  color: #fff;
+  text-shadow: 0 1px 2px #000;
+}
+
+.die--def {
+  background-image: url(/assets/die-ivory.png);
+  color: #1a100a;
+}
+
+.dice .vs {
+  color: var(--brass);
+  font-size: 0.7rem;
+  margin: 0 0.2rem;
 }
 
 .log {

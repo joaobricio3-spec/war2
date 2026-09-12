@@ -6,6 +6,7 @@ import {
   listLegalActions,
   pendingPlaceTotal,
   reduce,
+  TERRITORY_BY_ID,
   type Action,
   type GameState,
   type PlayerId,
@@ -25,6 +26,7 @@ const ui = {
   objective: document.querySelector("#objective") as HTMLElement,
   pending: document.querySelector("#pending") as HTMLElement,
   cards: document.querySelector("#cards") as HTMLElement,
+  dice: document.querySelector("#dice") as HTMLElement,
   log: document.querySelector("#log") as HTMLElement,
   error: document.querySelector("#error") as HTMLElement,
   overlay: document.querySelector("#overlay") as HTMLElement,
@@ -128,9 +130,33 @@ async function main() {
       const b = document.createElement("button");
       b.type = "button";
       b.dataset.card = c.id;
-      b.textContent = c.kind === "joker" ? "coringa" : `${c.territoryId} (${c.shape})`;
+      const image = document.createElement("img");
+      image.src = `/assets/card-${c.shape}.png`;
+      image.alt = "";
+      const label = document.createElement("span");
+      label.textContent = c.kind === "joker" ? "coringa" : TERRITORY_BY_ID[c.territoryId].name;
+      b.append(image, label);
       b.addEventListener("click", () => b.classList.toggle("on"));
       ui.cards.append(b);
+    }
+    ui.dice.innerHTML = "";
+    if (state.lastBattle) {
+      for (const value of state.lastBattle.attackDice) {
+        const die = document.createElement("div");
+        die.className = "die die--att";
+        die.textContent = String(value);
+        ui.dice.append(die);
+      }
+      const vs = document.createElement("span");
+      vs.className = "vs";
+      vs.textContent = "×";
+      ui.dice.append(vs);
+      for (const value of state.lastBattle.defendDice) {
+        const die = document.createElement("div");
+        die.className = "die die--def";
+        die.textContent = String(value);
+        ui.dice.append(die);
+      }
     }
     if (state.pendingOccupy) {
       ui.pending.textContent += ` | ocupe ${state.pendingOccupy.to} com 1–${state.pendingOccupy.maxArmies}`;
