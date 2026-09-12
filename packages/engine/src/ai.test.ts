@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { aiChooseAction, type Difficulty } from "./ai.ts";
+import { cloneState } from "./clone.ts";
 import { createGame } from "./createGame.ts";
 import { listLegalActions } from "./legal.ts";
+import { TERRITORY_IDS } from "./map/classic.ts";
 import { reduce } from "./reduce.ts";
 import { createSeededRng } from "./rng.ts";
 import type { Action, GameState } from "./types.ts";
@@ -90,35 +92,29 @@ describe("AI", () => {
     expect(aiChooseAction(over, over.currentPlayerId, "oficial")).toBeNull();
   });
 
-  it("is more aggressive as marechal than as recruta on the same board", () => {
-    // Deterministic-ish: compare attack frequency of marechal vs recruta over
-    // several independent games. Marechal's lower thresholds must attack more.
-    function attackShare(diff: Difficulty, seed: number): number {
-      const diffs: Difficulty[] = [diff, diff, diff];
-      const rng = createSeededRng(seed);
-      let s = newGame(diffs, seed);
-      let attacks = 0;
-      let total = 0;
-      let guard = 0;
-      while (s.phase !== "over" && guard < 50_000) {
-        const pid = s.currentPlayerId;
-        const a = aiChooseAction(s, pid, diff);
-        if (!a) break;
-        if (a.type === "attack") attacks += 1;
-        total += 1;
-        const r = reduce(s, a, rng);
-        if (!r.ok) throw new Error(r.error);
-        s = r.state;
-        guard += 1;
-      }
-      return total ? attacks / total : 0;
+  it("marechal takes a thin-border attack that recruta refuses", () => {
+    // Deterministic contract check: on a board whose only opening is a
+    // 2-army stack vs a 1-army neighbor (advantage 1), recruta must pass
+    // (needs ≥3 armies and advantage ≥2) while marechal attacks.
+    const s = cloneState(newGame(["recruta", "marechal"], 2));
+    s.phase = "attack";
+    s.currentPlayerId = "p1";
+    s.pendingOccupy = null;
+    s.mustTrade = false;
+    for (const id of TERRITORY_IDS) {
+      s.territories[id] = { ownerId: "p2", armies: 99 };
     }
-    let marechal = 0;
-    let recruta = 0;
-    for (const seed of [10, 20, 30]) {
-      marechal += attackShare("marechal", seed);
-      recruta += attackShare("recruta", seed);
+    s.territories.brasil = { ownerId: "p1", armies: 2 };
+    s.territories.venezuela = { ownerId: "p2", armies: 1 };
+
+    const recruta = aiChooseAction(s, "p1", "recruta");
+    expect(recruta?.type).toBe("endTurn");
+
+    const marechal = aiChooseAction(s, "p1", "marechal");
+    expect(marechal?.type).toBe("attack");
+    if (marechal?.type === "attack") {
+      expect(marechal.from).toBe("brasil");
+      expect(marechal.to).toBe("venezuela");
     }
-    expect(marechal).toBeGreaterThan(recruta);
   });
 });

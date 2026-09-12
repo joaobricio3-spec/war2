@@ -47,6 +47,7 @@ type Cell = {
 
 export interface BoardHooks {
   onTerritory: (id: TerritoryId) => void;
+  onEmpty?: () => void;
 }
 
 export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
@@ -70,7 +71,11 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   relief.width = WORLD.width;
   relief.height = WORLD.height;
   relief.alpha = 1;
-  relief.eventMode = "none";
+  relief.eventMode = "static";
+  relief.on("pointertap", () => {
+    if (panned) return;
+    hooks.onEmpty?.();
+  });
   world.addChild(relief);
 
   const lanes = new Graphics();
@@ -254,7 +259,8 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     },
     { passive: false },
   );
-  app.canvas.addEventListener("dblclick", () => fitWorld());
+  // Esc (handled in main.ts) calls resetView — dblclick would fire two
+  // pointertap actions on the territory under the cursor, so it stays free.
 
   function render(
     state: GameState,

@@ -103,15 +103,23 @@ function migrateHostIfNeeded(room: Room) {
   if (next) room.hostId = next.playerId;
 }
 
-/** Detaches the client from its current room (used before joining another). */
+/**
+ * Detaches the client from its current room. In the lobby (no game running)
+ * the seat is removed outright so it cannot become a ghost player at start;
+ * mid-game the seat is kept (ws=null) so the token can reconnect.
+ */
 function detach(client: Client) {
   const prev = client.roomCode ? rooms.get(client.roomCode) : undefined;
   const prevPid = client.playerId;
   client.roomCode = undefined;
   client.playerId = undefined;
   if (!prev) return;
-  const seat = prev.seats.find((s) => s.playerId === prevPid);
-  if (seat && seat.ws === client.ws) seat.ws = null;
+  const idx = prev.seats.findIndex((s) => s.playerId === prevPid);
+  if (idx < 0) return;
+  const seat = prev.seats[idx]!;
+  if (seat.ws !== client.ws) return; // another socket already owns this seat
+  if (prev.state && prev.state.phase !== "over") seat.ws = null;
+  else prev.seats.splice(idx, 1);
   migrateHostIfNeeded(prev);
   gcOrBroadcast(prev);
 }
@@ -143,7 +151,27 @@ function boundToSeat(seat: Seat, client: Client): boolean {
   return seat.ws === client.ws;
 }
 
+/** Next free pN id — seats removed in the lobby can leave holes. */
+function nextPlayerId(room: Room): PlayerId {
+  let max = 0;
+  for (const s of room.seats) {
+    const n = Number(s.playerId.slice(1));
+    if (Number.isInteger(n) && n > max) max = n;
+  }
+  return `p${max + 1}`;
+}
+
+/** First army color not held by a current seat. */
+function nextColor(room: Room): ArmyColor {
+  return COLORS.find((c) => !room.seats.some((s) => s.color === c)) ?? COLORS[0]!;
+}
+
 function startGame(room: Room) {
+  // Seats whose owner never came back are dropped — a dead seat would freeze
+  // the match forever on its turn.
+  room.seats = room.seats.filter(
+    (s) => s.ws !== null && s.ws.readyState === WebSocket.OPEN,
+  );
   room.state = createGame({
     rng: createSeededRng(randomBytes(4).readUInt32LE(0)),
     players: room.seats.map((s) => ({
@@ -212,7 +240,7 @@ function handle(client: Client, raw: string) {
       send(client.ws, { type: "error", message: "você já está nesta sala" });
       return;
     }
-    if (room.state) {
+    if (room.state && room.state.phase !== "over") {
       send(client.ws, { type: "error", message: "partida já começou — use reconnect" });
       return;
     }
@@ -221,12 +249,12 @@ function handle(client: Client, raw: string) {
       return;
     }
     detach(client);
-    const playerId = `p${room.seats.length + 1}`;
+    const playerId = nextPlayerId(room);
     const seat: Seat = {
       playerId,
       nickname,
       token: randomBytes(16).toString("hex"),
-      color: COLORS[room.seats.length]!,
+      color: nextColor(room),
       ws: client.ws,
     };
     room.seats.push(seat);
@@ -248,7 +276,7 @@ function handle(client: Client, raw: string) {
       send(client.ws, { type: "error", message: "reconnect inválido" });
       return;
     }
-    if (client.roomCode !== room.code) detach(client);
+    detach(client);
     const prev = seat.ws;
     seat.ws = client.ws;
     client.roomCode = room.code;
@@ -266,6 +294,12 @@ function handle(client: Client, raw: string) {
     return;
   }
 
+  if (msg.type === "leave") {
+    detach(client);
+    send(client.ws, { type: "room", host: false, players: [], state: null });
+    return;
+  }
+
   if (msg.type === "start") {
     if (!boundToSeat(seat, client)) {
       send(client.ws, { type: "error", message: "reconecte nesta sessão" });
@@ -279,8 +313,11 @@ function handle(client: Client, raw: string) {
       send(client.ws, { type: "error", message: "partida já começou" });
       return;
     }
-    if (room.seats.length < 2) {
-      send(client.ws, { type: "error", message: "mínimo 2 jogadores" });
+    const connected = room.seats.filter(
+      (s) => s.ws !== null && s.ws.readyState === WebSocket.OPEN,
+    );
+    if (connected.length < 2) {
+      send(client.ws, { type: "error", message: "mínimo 2 jogadores conectados" });
       return;
     }
     startGame(room);
@@ -362,8 +399,14 @@ export function startServer(port: number) {
       client.roomCode = undefined;
       client.playerId = undefined;
       if (!room) return;
-      const seat = room.seats.find((s) => s.playerId === pid);
-      if (seat && seat.ws === ws) seat.ws = null;
+      const idx = room.seats.findIndex((s) => s.playerId === pid);
+      if (idx < 0) return;
+      const seat = room.seats[idx]!;
+      if (seat.ws !== ws) return;
+      // Lobby: a closed socket frees the seat. Mid-game: keep it (ws=null)
+      // so the player can reconnect with their token.
+      if (room.state && room.state.phase !== "over") seat.ws = null;
+      else room.seats.splice(idx, 1);
       migrateHostIfNeeded(room);
       gcOrBroadcast(room);
     });

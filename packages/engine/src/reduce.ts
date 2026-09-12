@@ -83,7 +83,11 @@ function eliminateIfNeeded(state: GameState, victimId: PlayerId, killerId: Playe
   convertOrphanDestroyObjectives(state, victim.color, killerId);
 }
 
+const hasTerritory = (id: unknown): id is TerritoryId =>
+  typeof id === "string" && Object.hasOwn(TERRITORY_BY_ID, id);
+
 export function reduce(state: GameState, action: Action, rng: Rng): ReduceResult {
+  if (!action || typeof action !== "object") return fail("ação inválida");
   const err = requireCurrent(state, action.playerId);
   if (err) return fail(err);
 
@@ -113,7 +117,7 @@ function place(
   state: GameState,
   action: Extract<Action, { type: "place" }>,
 ): ReduceResult {
-  if (!TERRITORY_BY_ID[action.territoryId]) return fail("território desconhecido");
+  if (!hasTerritory(action.territoryId)) return fail("território desconhecido");
   if (!Number.isInteger(action.count) || action.count < 1) return fail("count inválido");
   const next = cloneState(state);
 
@@ -178,11 +182,9 @@ function trade(
   }
   player.cards = player.cards.filter((c) => !action.cardIds.includes(c.id));
   next.mustTrade = player.cards.length >= 5;
-  if (next.phase === "attack" && !next.mustTrade && pendingPlaceTotal(next.armiesToPlace) === 0) {
-    /* stay in attack */
-  } else if (next.phase === "attack") {
-    next.phase = "reinforce";
-  }
+  // A trade always grants ≥4 armies to place, so a forced trade mid-attack
+  // (post-elimination) falls back to reinforce to place them.
+  if (state.phase === "attack") next.phase = "reinforce";
   return { ok: true, state: checkWin(next) };
 }
 
@@ -208,7 +210,7 @@ function attack(
   if (state.mustTrade) return fail("troca obrigatória");
   if (state.phase !== "attack") return fail("não é fase de ataque");
   if (state.pendingOccupy) return fail("ocupe o território conquistado");
-  if (!TERRITORY_BY_ID[action.from] || !TERRITORY_BY_ID[action.to]) {
+  if (!hasTerritory(action.from) || !hasTerritory(action.to)) {
     return fail("território desconhecido");
   }
   if (!Number.isInteger(action.armies)) return fail("armies inválido");
@@ -294,7 +296,7 @@ function fortify(
   if (state.fortifiedThisTurn) return fail("só um deslocamento por turno");
   if (!Number.isInteger(action.armies) || action.armies < 1) return fail("armies inválido");
   if (action.from === action.to) return fail("origem e destino iguais");
-  if (!TERRITORY_BY_ID[action.from] || !TERRITORY_BY_ID[action.to]) {
+  if (!hasTerritory(action.from) || !hasTerritory(action.to)) {
     return fail("território desconhecido");
   }
   const from = state.territories[action.from];

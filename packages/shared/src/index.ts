@@ -4,6 +4,7 @@ export type C2S =
   | { type: "create"; nickname: string }
   | { type: "join"; roomCode: string; nickname: string }
   | { type: "reconnect"; roomCode: string; token: string }
+  | { type: "leave" }
   | { type: "start" }
   | { type: "action"; action: Action };
 

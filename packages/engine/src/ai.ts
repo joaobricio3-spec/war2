@@ -159,7 +159,7 @@ export function aiChooseAction(
   if (state.phase === "over" || state.currentPlayerId !== playerId) return null;
   const legal = listLegalActions(state, playerId);
   if (legal.length === 0) return null;
-  const profile = PROFILES[difficulty];
+  const profile = PROFILES[difficulty] ?? PROFILES.oficial;
 
   // Occupy a just-conquered territory: push forward with the max legal armies.
   if (state.pendingOccupy) {
@@ -167,11 +167,22 @@ export function aiChooseAction(
     return occupies.length ? occupies[occupies.length - 1]! : legal[0]!;
   }
 
-  // Setup: drop the lone army on the neediest owned border.
+  // Setup: drop the lone army on the neediest owned border. Every profile
+  // shores up the most-threatened frontier here — personality shows in play.
   if (state.phase === "setup_place") {
-    const target = placementTarget(state, playerId, profile);
-    if (target) return { type: "place", playerId, territoryId: target.territoryId, count: 1 };
-    return legal[0]!;
+    const owned = ownedIds(state, playerId);
+    const borders = owned.filter((id) => isBorder(state, playerId, id));
+    const pool = borders.length ? borders : owned;
+    let target: TerritoryId | null = null;
+    let best = -Infinity;
+    for (const id of pool) {
+      const score = enemyPressure(state, playerId, id) - state.territories[id].armies;
+      if (score > best) {
+        best = score;
+        target = id;
+      }
+    }
+    return target ? { type: "place", playerId, territoryId: target, count: 1 } : legal[0]!;
   }
 
   const player = state.players.find((p) => p.id === playerId)!;

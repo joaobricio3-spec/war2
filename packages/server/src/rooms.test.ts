@@ -13,6 +13,30 @@ function onceMessage(ws: WebSocket): Promise<S2C> {
   });
 }
 
+/** Resolves with the first message matching `pred` (4s timeout). */
+function waitFor(ws: WebSocket, pred: (m: S2C) => boolean): Promise<S2C> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("waitFor timeout")), 4000);
+    const onMsg = (data: WebSocket.RawData) => {
+      const msg = JSON.parse(String(data)) as S2C;
+      if (pred(msg)) {
+        clearTimeout(t);
+        ws.off("message", onMsg);
+        resolve(msg);
+      }
+    };
+    ws.on("message", onMsg);
+  });
+}
+
+async function joinRoom(url: string, roomCode: string, nickname: string) {
+  const ws = new WebSocket(url);
+  await new Promise((r) => ws.once("open", r));
+  ws.send(JSON.stringify({ type: "join", roomCode, nickname }));
+  const welcome = await onceMessage(ws);
+  return { ws, welcome };
+}
+
 describe("friend rooms", () => {
   it("creates a room, joins a second player, starts, and reconnects", async () => {
     const wss = startServer(0);
@@ -136,6 +160,88 @@ describe("friend rooms", () => {
 
     host2.close();
     guest.close();
+    await new Promise<void>((resolve) => wss.close(() => resolve()));
+  });
+
+  it("drops ghost seats when a lobby socket dies, then lets someone else take it", async () => {
+    const wss = startServer(0);
+    const port = (wss.address() as { port: number }).port;
+    const url = `ws://127.0.0.1:${port}/ws`;
+
+    const host = new WebSocket(url);
+    await new Promise((r) => host.once("open", r));
+    host.send(JSON.stringify({ type: "create", nickname: "Ana" }));
+    const welcome = await onceMessage(host);
+    if (welcome.type !== "welcome") throw new Error("no welcome");
+
+    const ghost = await joinRoom(url, welcome.roomCode, "Ghost");
+    ghost.ws.close();
+
+    // Host sees the roster shrink back to 1 connected player.
+    const shrunk = (await waitFor(
+      host,
+      (m) => m.type === "room" && m.players.length === 1,
+    )) as Extract<S2C, { type: "room" }>;
+    expect(shrunk.players).toHaveLength(1);
+
+    // A fresh joiner reuses the freed seat id and the game starts with 2.
+    const guest = await joinRoom(url, welcome.roomCode, "Bia");
+    if (guest.welcome.type !== "welcome") throw new Error("no welcome");
+    expect(guest.welcome.playerId).toBe("p2");
+
+    host.send(JSON.stringify({ type: "start" }));
+    const started = (await waitFor(host, (m) => m.type === "state")) as Extract<
+      S2C,
+      { type: "state" }
+    >;
+    expect(started.state.players).toHaveLength(2);
+
+    host.close();
+    guest.ws.close();
+    await new Promise<void>((resolve) => wss.close(() => resolve()));
+  });
+
+  it("leave frees the seat, migrates host, and empties the room", async () => {
+    const wss = startServer(0);
+    const port = (wss.address() as { port: number }).port;
+    const url = `ws://127.0.0.1:${port}/ws`;
+
+    const host = new WebSocket(url);
+    await new Promise((r) => host.once("open", r));
+    host.send(JSON.stringify({ type: "create", nickname: "Ana" }));
+    const welcome = await onceMessage(host);
+    if (welcome.type !== "welcome") throw new Error("no welcome");
+
+    const guest = await joinRoom(url, welcome.roomCode, "Bia");
+    if (guest.welcome.type !== "welcome") throw new Error("no welcome");
+
+    // Attach listeners before sending — ws 'message' events are not buffered.
+    const promotedP = waitFor(
+      guest.ws,
+      (m) => m.type === "room" && m.players.length === 1,
+    );
+    const ackP = waitFor(host, (m) => m.type === "room" && m.players.length === 0);
+    host.send(JSON.stringify({ type: "leave" }));
+    const ack = await ackP;
+    expect(ack.type).toBe("room");
+
+    // Guest is promoted to host after the original host left.
+    const promoted = (await promotedP) as Extract<S2C, { type: "room" }>;
+    expect(promoted.host).toBe(true);
+
+    // Guest leaves too → room is gone; joining again fails.
+    const goneP = waitFor(guest.ws, (m) => m.type === "room" && m.players.length === 0);
+    guest.ws.send(JSON.stringify({ type: "leave" }));
+    await goneP;
+
+    const late = await joinRoom(url, welcome.roomCode, "Clo");
+    expect(late.welcome.type).toBe("error");
+    if (late.welcome.type === "error")
+      expect(late.welcome.message).toMatch(/não existe|inexistente/i);
+
+    host.close();
+    guest.ws.close();
+    late.ws.close();
     await new Promise<void>((resolve) => wss.close(() => resolve()));
   });
 });

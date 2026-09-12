@@ -31,7 +31,10 @@ export function listLegalActions(state: GameState, playerId: PlayerId): Action[]
   const mine = TERRITORY_IDS.filter((id) => state.territories[id].ownerId === playerId);
 
   if (state.phase === "setup_place") {
-    for (const id of mine) out.push({ type: "place", playerId, territoryId: id, count: 1 });
+    const me = state.players.find((p) => p.id === playerId);
+    if (me && me.setupRemaining > 0) {
+      for (const id of mine) out.push({ type: "place", playerId, territoryId: id, count: 1 });
+    }
     return out;
   }
 

@@ -12,6 +12,7 @@ export {
   objectivesForColors,
   ALL_OBJECTIVES,
   continentBonusFor,
+  territoryContinent,
 } from "./objectives.ts";
 export {
   TERRITORIES,

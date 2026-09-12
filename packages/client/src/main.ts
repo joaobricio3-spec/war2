@@ -7,6 +7,7 @@ import {
   effectiveObjective,
   listLegalActions,
   pendingPlaceTotal,
+  territoryContinent,
   reduce,
   type Action,
   type Difficulty,
@@ -21,6 +22,23 @@ import { showBattle } from "./dice.ts";
 const COLORS = ["red", "blue", "green", "yellow", "black", "white"] as const;
 const AI_NAMES = ["Bóris", "Célia", "Dante", "Erwin", "Fátima"];
 const SAVE_KEY = "war2-campaign-v1";
+
+const PHASE_PT: Record<string, string> = {
+  setup_place: "posicionamento",
+  reinforce: "reforço",
+  attack: "ataque",
+  fortify: "deslocamento",
+  over: "fim de jogo",
+};
+
+const COLOR_PT: Record<string, string> = {
+  red: "vermelho",
+  blue: "azul",
+  green: "verde",
+  yellow: "amarelo",
+  black: "preto",
+  white: "branco",
+};
 
 type Mode = "hotseat" | "net" | "campaign";
 
@@ -50,6 +68,13 @@ const ui = {
   logEmpty: document.querySelector("#log-empty") as HTMLElement,
   error: document.querySelector("#error") as HTMLElement,
   roster: document.querySelector("#roster") as HTMLElement,
+  placen: document.querySelector("#placen") as HTMLElement,
+  chooser: document.querySelector("#chooser") as HTMLElement,
+  chooserHint: document.querySelector("#chooser-hint") as HTMLElement,
+  chooserBtns: document.querySelector("#chooser-btns") as HTMLElement,
+  chooserN: document.querySelector("#chooser-n") as HTMLInputElement,
+  chooserOk: document.querySelector("#chooser-ok") as HTMLButtonElement,
+  chooserCancel: document.querySelector("#chooser-cancel") as HTMLButtonElement,
   lobby: document.querySelector("#lobby") as HTMLElement,
   lobbyCode: document.querySelector("#lobby-code") as HTMLElement,
   lobbyPlayers: document.querySelector("#lobby-players") as HTMLElement,
@@ -79,15 +104,27 @@ function describeObjective(state: GameState, id: PlayerId): string {
     return `Conquistar: ${o.continents.map((cid) => CONTINENT_BY_ID[cid].name).join(" e ")}`;
   if (o.kind === "continents_plus_one")
     return `Conquistar ${o.continents.map((cid) => CONTINENT_BY_ID[cid].name).join(" + ")} e mais um continente`;
-  return `Destruir exércitos ${o.color}`;
+  return `Destruir exércitos ${COLOR_PT[o.color] ?? o.color}`;
 }
+
+const PHASES = new Set(["setup_place", "reinforce", "attack", "fortify", "over"]);
+const DIFFS = new Set(["recruta", "oficial", "marechal"]);
 
 function loadCampaign(): SavedCampaign | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const d = JSON.parse(raw) as SavedCampaign;
-    if (!d?.state?.players?.length || !d.humanId) return null;
+    // Structural validation — a corrupt save used to soft-lock the AI loop.
+    const s = d?.state;
+    if (!s || typeof s !== "object") return null;
+    if (!Array.isArray(s.players) || s.players.length < 2) return null;
+    if (!s.players.some((p) => p.id === d.humanId)) return null;
+    if (typeof s.territories !== "object" || Object.keys(s.territories).length !== 42)
+      return null;
+    if (!PHASES.has(s.phase)) return null;
+    if (!Array.isArray(d.ai) || !d.ai.every(([id, dd]) => typeof id === "string" && DIFFS.has(dd)))
+      return null;
     return d;
   } catch {
     return null;
@@ -95,6 +132,7 @@ function loadCampaign(): SavedCampaign | null {
 }
 
 function log(line: string) {
+  if (!line) return;
   const p = document.createElement("p");
   p.textContent = line;
   ui.log.prepend(p);
@@ -112,6 +150,8 @@ function describeAction(a: Action): string {
       return "troca de cartas";
     case "endReinforce":
       return "encerrou o reforço";
+    case "endAttack":
+      return "encerrou os ataques";
     case "attack":
       return `ataque ${tName(a.from)} → ${tName(a.to)}`;
     case "occupy":
@@ -129,7 +169,6 @@ async function main() {
   const canvasHost = document.querySelector("#board") as HTMLElement;
   let state: GameState | null = null;
   let selected: TerritoryId | null = null;
-  let viewer: PlayerId = "p1";
   let mode: Mode = "hotseat";
   let rng = createSeededRng(Date.now() % 1_000_000);
   let ws: WebSocket | null = null;
@@ -145,6 +184,17 @@ async function main() {
   let aiThinking = false;
   let lastBattleKey = "";
   let cancelDice: () => void = () => {};
+  let errorTimer: number | null = null;
+  let placeN = 1;
+
+  function showError(msg: string) {
+    ui.error.textContent = msg;
+    if (errorTimer !== null) window.clearTimeout(errorTimer);
+    errorTimer = window.setTimeout(() => {
+      ui.error.textContent = "";
+      errorTimer = null;
+    }, 7000);
+  }
 
   ui.continue.disabled = loadCampaign() === null;
 
@@ -161,7 +211,6 @@ async function main() {
       if (!state) return;
       if (mode === "campaign" && (aiThinking || state.currentPlayerId !== humanId)) return;
       const me = mode === "net" ? netId : mode === "campaign" ? humanId : state.currentPlayerId;
-      viewer = me;
       if (state.pendingOccupy) return;
       if (state.phase === "setup_place" || state.phase === "reinforce") {
         const dests = legalTargets(state, me);
@@ -170,7 +219,12 @@ async function main() {
           paint();
           return;
         }
-        dispatch({ type: "place", playerId: me, territoryId: id, count: 1 });
+        // Setup coloca 1 por vez (regra); no reforço vale o seletor +N.
+        const count =
+          state.phase === "reinforce" ? Math.min(placeN, placeableNow(state, id)) : 1;
+        if (count >= 1) {
+          dispatch({ type: "place", playerId: me, territoryId: id, count });
+        }
         selected = id;
         return;
       }
@@ -187,10 +241,24 @@ async function main() {
           return;
         }
         const from = selected;
-        const n = Math.min(3, state.territories[from].armies - 1);
-        if (n === 1 || n === 2 || n === 3) {
-          dispatch({ type: "attack", playerId: me, from, to: id, armies: n });
+        const maxDice = Math.min(3, state.territories[from].armies - 1);
+        if (maxDice < 1) return;
+        if (maxDice === 1) {
+          dispatch({ type: "attack", playerId: me, from, to: id, armies: 1 });
+          selected = from;
+          paint();
+          return;
         }
+        showChooser({
+          hint: `Atacar ${tName(id)} com quantos dados? (1 a ${maxDice})`,
+          min: 1,
+          max: maxDice,
+          onPick: (n) =>
+            dispatch({ type: "attack", playerId: me, from, to: id, armies: n as 1 | 2 | 3 }),
+        });
+        selected = from;
+        paint();
+        return;
       } else if (state.phase === "fortify") {
         if (!dests.has(id)) {
           selected = id;
@@ -198,16 +266,84 @@ async function main() {
           return;
         }
         const from = selected;
-        const armies = state.territories[from].armies - 1;
-        if (armies >= 1) dispatch({ type: "fortify", playerId: me, from, to: id, armies });
+        const movable = state.territories[from].armies - 1;
+        if (movable < 1) return;
+        if (movable === 1) {
+          dispatch({ type: "fortify", playerId: me, from, to: id, armies: 1 });
+          selected = null;
+          paint();
+          return;
+        }
+        showChooser({
+          hint: `Deslocar de ${tName(from)} → ${tName(id)}: quantos? (1 a ${movable})`,
+          min: 1,
+          max: movable,
+          onPick: (n) =>
+            dispatch({ type: "fortify", playerId: me, from, to: id, armies: n }),
+        });
+        selected = null;
+        paint();
+        return;
       }
       selected = id;
+      paint();
+    },
+    onEmpty() {
+      if (selected) {
+        selected = null;
+        paint();
+      }
     },
   });
 
-  function updateDice() {
+  interface ChooserOpts {
+  hint: string;
+  min: number;
+  max: number;
+  onPick: (n: number) => void;
+}
+
+let chooserPick: ((n: number) => void) | null = null;
+
+function showChooser(opts: ChooserOpts) {
+  ui.chooserHint.textContent = opts.hint;
+  ui.chooser.hidden = false;
+  chooserPick = opts.onPick;
+  ui.chooserN.min = String(opts.min);
+  ui.chooserN.max = String(opts.max);
+  ui.chooserN.value = String(Math.min(opts.max, Math.max(opts.min, 1)));
+  ui.chooserBtns.innerHTML = "";
+  // Preset buttons for small ranges (dice), typed input for big fortify moves.
+  if (opts.max <= 4) {
+    for (let n = opts.min; n <= opts.max; n++) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = String(n);
+      b.addEventListener("click", () => {
+        hideChooser();
+        opts.onPick(n);
+      });
+      ui.chooserBtns.append(b);
+    }
+    ui.chooserN.parentElement!.hidden = true;
+  } else {
+    ui.chooserN.parentElement!.hidden = false;
+  }
+}
+
+function hideChooser() {
+  ui.chooser.hidden = true;
+  chooserPick = null;
+}
+
+function updateDice() {
     if (!state) return;
-    const key = state.lastBattle ? JSON.stringify(state.lastBattle) : "";
+    // Same dice can repeat between battles — mix in turn + total armies so the
+    // panel replays every distinct battle.
+    const armies = Object.values(state.territories).reduce((sum, t) => sum + t.armies, 0);
+    const key = state.lastBattle
+      ? `${state.turnIndex}|${armies}|${state.lastBattle.attackDice}|${state.lastBattle.defendDice}`
+      : `${state.turnIndex}|none`;
     if (key === lastBattleKey) return;
     lastBattleKey = key;
     cancelDice();
@@ -224,6 +360,15 @@ async function main() {
         `atacante perde ${b.attackLosses}, defensor perde ${b.defendLosses}`,
     );
     cancelDice = showBattle(ui.dice, state.lastBattle);
+  }
+
+  // Armies this territory may still receive from the pending pools
+  // (territory-locked + continent-locked + general). Mirrors legal.ts.
+  function placeableNow(s: GameState, id: TerritoryId): number {
+    const t = s.armiesToPlace;
+    return (
+      (t.byTerritory[id] ?? 0) + (t.byContinent[territoryContinent(id)] ?? 0) + t.general
+    );
   }
 
   function legalTargets(s: GameState, me: PlayerId): Set<TerritoryId> {
@@ -261,12 +406,11 @@ async function main() {
         : mode === "campaign"
           ? humanId
           : s.currentPlayerId;
-    viewer = me;
     board.render(s, selected, me, legalTargets(s, me));
     const p = s.players.find((pl) => pl.id === me);
     const cur = s.players.find((pl) => pl.id === s.currentPlayerId);
-    ui.phase.textContent = s.phase;
-    ui.turn.textContent = `${cur?.nickname ?? s.currentPlayerId} (${cur?.color ?? ""})`;
+    ui.phase.textContent = PHASE_PT[s.phase] ?? s.phase;
+    ui.turn.textContent = `${cur?.nickname ?? s.currentPlayerId} (${COLOR_PT[cur?.color ?? ""] ?? cur?.color ?? ""})`;
     ui.objective.textContent = describeObjective(s, me);
     ui.pending.textContent =
       s.phase === "setup_place"
@@ -284,6 +428,9 @@ async function main() {
       ui.status.dataset.tone = iWon ? "win" : "lose";
     } else if (s.phase === "setup_place" && myTurn) {
       ui.status.textContent = `Setup — posicione 1 tropa (restam ${p?.setupRemaining ?? 0})`;
+      ui.status.dataset.tone = "you";
+    } else if (myTurn && s.mustTrade) {
+      ui.status.textContent = "Troca obrigatória — selecione 3 cartas";
       ui.status.dataset.tone = "you";
     } else if (myTurn) {
       ui.status.textContent =
@@ -317,10 +464,14 @@ async function main() {
     }
 
     const humanTurn =
-      mode !== "campaign" ||
-      (s.currentPlayerId === humanId && !aiThinking && s.phase !== "over");
+      s.currentPlayerId === me &&
+      s.phase !== "over" &&
+      !(mode === "campaign" && aiThinking);
     ui.end.disabled = !humanTurn || !!s.pendingOccupy || s.phase === "setup_place";
-    ui.trade.disabled = !humanTurn || s.phase === "setup_place";
+    ui.trade.disabled =
+      !humanTurn || !!s.pendingOccupy || !(s.phase === "reinforce" || s.mustTrade);
+    ui.placen.hidden =
+      !humanTurn || s.phase !== "reinforce" || !!s.pendingOccupy;
     if (s.phase === "setup_place") ui.end.textContent = "Posicione tropas";
     else if (s.phase === "reinforce") ui.end.textContent = "Encerrar reforço";
     else if (s.phase === "attack") ui.end.textContent = "Ir ao deslocamento";
@@ -382,7 +533,7 @@ async function main() {
     ui.status.hidden = false;
     ui.status.textContent = "Conquista — ocupe o território";
     ui.status.dataset.tone = "you";
-    ui.occupyHint.textContent = `${pend.to}: ${pend.minArmies} a ${pend.maxArmies} exércitos (1 fica na origem)`;
+    ui.occupyHint.textContent = `${tName(pend.to)}: ${pend.minArmies} a ${pend.maxArmies} exércitos (1 fica na origem)`;
     ui.occupyBtns.innerHTML = "";
     for (let n = pend.minArmies; n <= pend.maxArmies; n++) {
       const b = document.createElement("button");
@@ -393,23 +544,24 @@ async function main() {
     }
   }
 
-  function applyLocal(action: Action) {
-    if (!state) return;
+  function applyLocal(action: Action): boolean {
+    if (!state) return false;
     const r = reduce(state, action, rng);
     if (!r.ok) {
-      ui.error.textContent = r.error;
-      return;
+      showError(r.error);
+      return false;
     }
     ui.error.textContent = "";
     state = r.state;
     if (mode === "campaign") saveCampaign();
+    return true;
   }
 
   function dispatch(action: Action) {
     if (!state) return;
     if (mode === "net") {
       if (ws?.readyState !== WebSocket.OPEN) {
-        ui.error.textContent = "sem conexão — reconectando";
+        showError("sem conexão — reconectando");
         tryReconnect();
         return;
       }
@@ -417,8 +569,12 @@ async function main() {
       ws.send(JSON.stringify(msg));
       return;
     }
-    applyLocal(action);
-    if (ui.error.textContent === "") log(describeAction(action));
+    hideChooser();
+    if (!applyLocal(action)) {
+      paint();
+      return;
+    }
+    log(describeAction(action));
     paint();
     if (state?.phase === "over") onGameOver();
     else if (mode === "campaign") maybeRunAI();
@@ -458,6 +614,19 @@ async function main() {
     aiTimer = window.setTimeout(stepAI, reducedMotion ? 8 : setup ? 36 : 160);
   }
 
+  function aiFallback(pid: PlayerId): boolean {
+    if (!state) return false;
+    for (const t of ["endTurn", "endAttack", "endReinforce"] as const) {
+      const r = reduce(state, { type: t, playerId: pid } as Action, rng);
+      if (r.ok) {
+        state = r.state;
+        saveCampaign();
+        return true;
+      }
+    }
+    return false;
+  }
+
   function stepAI() {
     aiTimer = null;
     if (mode !== "campaign" || !state) return;
@@ -468,33 +637,40 @@ async function main() {
       paint();
       return;
     }
+    const nick = state.players.find((p) => p.id === pid)?.nickname ?? pid;
     const action = aiChooseAction(state, pid, diff);
+    let halted = false;
     if (!action) {
-      aiThinking = false;
-      paint();
-      return;
-    }
-    const r = reduce(state, action, rng);
-    if (r.ok) {
-      state = r.state;
-      saveCampaign();
+      halted = !aiFallback(pid);
+      if (halted) log(`IA ${nick} sem jogada legal — turno travado`);
     } else {
-      const safe = reduce(state, { type: "endTurn", playerId: pid }, rng);
-      if (safe.ok) state = safe.state;
+      const r = reduce(state, action, rng);
+      if (r.ok) {
+        state = r.state;
+        saveCampaign();
+        log(`${nick}: ${describeAction(action)}`);
+      } else {
+        halted = !aiFallback(pid);
+        if (halted) log(`IA ${nick} travou (${r.error})`);
+      }
     }
     paint();
     if (state.phase === "over") {
       onGameOver();
       return;
     }
+    if (halted) {
+      aiThinking = false;
+      return;
+    }
     if (aiPlayers.has(state.currentPlayerId)) {
       const delay = reducedMotion
         ? 8
-        : action.type === "attack"
+        : action?.type === "attack"
           ? 340
-          : action.type === "occupy"
+          : action?.type === "occupy"
             ? 240
-            : state.phase === "setup_place" || action.type === "place"
+            : state.phase === "setup_place" || action?.type === "place"
               ? 36
               : 120;
       aiTimer = window.setTimeout(stepAI, delay);
@@ -523,6 +699,7 @@ async function main() {
     ui.gameoverSub.textContent = won
       ? "Você cumpriu o objetivo."
       : `Venceu ${winner?.nickname ?? "?"}.`;
+    ui.overlay.hidden = true;
     ui.gameover.hidden = false;
     paint();
   }
@@ -532,6 +709,8 @@ async function main() {
     ui.gameover.hidden = true;
     ui.loading.hidden = true;
     ui.help.hidden = true;
+    ui.dice.hidden = true;
+    ui.dice.innerHTML = "";
   }
 
   function startCampaign(aiCount: number, diff: Difficulty) {
@@ -547,10 +726,8 @@ async function main() {
     mode = "campaign";
     humanId = "p1";
     aiPlayers = new Map(players.slice(1).map((p) => [p.id, diff] as [PlayerId, Difficulty]));
-    ws?.close();
-    ws = null;
-    roomCode = "";
-    netHost = false;
+    leaveRoom();
+    sessionStorage.removeItem("war2");
 
     ui.overlay.hidden = true;
     ui.loading.hidden = false;
@@ -583,19 +760,36 @@ async function main() {
     state = saved.state;
     selected = null;
     lastBattleKey = "x";
-    ws?.close();
-    ws = null;
+    leaveRoom();
+    sessionStorage.removeItem("war2");
     hideOverlays();
     log("campanha retomada");
     paint();
     maybeRunAI();
   }
 
+  function leaveRoom() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({ type: "leave" } satisfies C2S));
+      } catch {
+        /* socket dying anyway */
+      }
+    }
+    const old = ws;
+    ws = null;
+    roomCode = "";
+    netHost = false;
+    old?.close();
+  }
+
   function goToTitle() {
     stopAI();
     cancelDice();
+    hideChooser();
     ui.dice.hidden = true;
     ui.occupy.hidden = true;
+    ui.placen.hidden = true;
     ui.gameover.hidden = true;
     ui.loading.hidden = true;
     ui.help.hidden = true;
@@ -607,8 +801,16 @@ async function main() {
 
   function abandonCampaign() {
     stopAI();
-    localStorage.removeItem(SAVE_KEY);
+    // "Abandonar" só apaga o save quando o jogo abandonado É a campanha —
+    // sair de um hotseat/sala não pode destruir a campanha pausada.
+    if (mode === "campaign") localStorage.removeItem(SAVE_KEY);
+    if (mode === "net") {
+      leaveRoom();
+      sessionStorage.removeItem("war2");
+      token = "";
+    }
     state = null;
+    selected = null;
     ui.log.innerHTML = "";
     goToTitle();
   }
@@ -634,7 +836,7 @@ async function main() {
       (el) => (el as HTMLElement).dataset.card!,
     );
     if (ids.length !== 3) {
-      ui.error.textContent = "selecione 3 cartas";
+      showError("selecione 3 cartas");
       return;
     }
     dispatch({ type: "trade", playerId: me, cardIds: ids });
@@ -673,6 +875,10 @@ async function main() {
         goToTitle();
         return;
       }
+      if (!ui.chooser.hidden) {
+        hideChooser();
+        return;
+      }
       if (!ui.overlay.hidden) return;
       if (selected) {
         selected = null;
@@ -690,7 +896,11 @@ async function main() {
     const me = mode === "net" ? netId : mode === "campaign" ? humanId : state.currentPlayerId;
     const dests = legalTargets(state, me);
     const id = selected && dests.has(selected) ? selected : null;
-    if (id) dispatch({ type: "place", playerId: me, territoryId: id, count: 1 });
+    if (id) {
+      const count =
+        state.phase === "reinforce" ? Math.min(placeN, placeableNow(state, id)) : 1;
+      if (count >= 1) dispatch({ type: "place", playerId: me, territoryId: id, count });
+    }
   });
 
   document.querySelector("#hotseat")?.addEventListener("click", () => {
@@ -704,14 +914,10 @@ async function main() {
     rng = createSeededRng(Date.now() % 1_000_000);
     mode = "hotseat";
     sessionStorage.removeItem("war2");
-    const old = ws;
-    ws = null;
-    roomCode = "";
-    netHost = false;
-    old?.close();
+    leaveRoom();
     state = createGame({ players, rng });
     selected = null;
-    lastBattleKey = "";
+    lastBattleKey = "x";
     hideOverlays();
     log(`hotseat ${n} jogadores`);
     paint();
@@ -742,9 +948,15 @@ async function main() {
       }
     });
     sock.addEventListener("message", (ev) => {
-      const msg = JSON.parse(String(ev.data)) as S2C;
+      if (ws !== sock) return; // stale socket — never overwrite current state
+      let msg: S2C;
+      try {
+        msg = JSON.parse(String(ev.data)) as S2C;
+      } catch {
+        return;
+      }
       if (msg.type === "error") {
-        ui.error.textContent = msg.message;
+        showError(msg.message);
         if (/reconnect/i.test(msg.message)) {
           sessionStorage.removeItem("war2");
           token = "";
@@ -766,8 +978,11 @@ async function main() {
         sessionStorage.setItem("war2", JSON.stringify({ token, roomCode, url }));
         log(`sala ${roomCode}`);
         if (msg.state) {
-          hideOverlays();
-          paint();
+          if (msg.state.phase === "over") onGameOver();
+          else {
+            hideOverlays();
+            paint();
+          }
         } else {
           updateLobby(msg.players);
         }
@@ -778,8 +993,12 @@ async function main() {
         if (msg.state) {
           state = msg.state;
           ui.error.textContent = "";
-          hideOverlays();
-          paint();
+          hideChooser();
+          if (msg.state.phase === "over") onGameOver();
+          else {
+            hideOverlays();
+            paint();
+          }
         } else {
           updateLobby(msg.players);
         }
@@ -788,9 +1007,13 @@ async function main() {
       if (msg.type === "state") {
         state = msg.state;
         ui.error.textContent = "";
+        hideChooser();
+        if (state.phase === "over") {
+          onGameOver();
+          return;
+        }
         hideOverlays();
         paint();
-        if (state.phase === "over") onGameOver();
       }
     });
     previous?.close();
@@ -811,6 +1034,24 @@ async function main() {
     mode = "net";
     connect(url, { type: "join", roomCode: code, nickname: nick });
   });
+  ui.chooserOk.addEventListener("click", () => {
+    const pick = chooserPick;
+    const lo = Number(ui.chooserN.min) || 1;
+    const hi = Number(ui.chooserN.max) || 1;
+    const n = Math.min(hi, Math.max(lo, Math.round(Number(ui.chooserN.value) || lo)));
+    hideChooser();
+    pick?.(n);
+  });
+  ui.chooserCancel.addEventListener("click", hideChooser);
+  ui.placen.querySelectorAll("button").forEach((b) => {
+    b.addEventListener("click", () => {
+      placeN = Number((b as HTMLElement).dataset.n) || 1;
+      ui.placen
+        .querySelectorAll("button")
+        .forEach((x) => x.classList.toggle("on", x === b));
+    });
+  });
+
   document.querySelector("#startnet")?.addEventListener("click", () => {
     if (ws?.readyState !== WebSocket.OPEN) {
       ui.error.textContent = "sem conexão";

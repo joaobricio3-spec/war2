@@ -29,6 +29,23 @@
         </dl>
         <ul id="roster" class="roster"></ul>
         <div id="dice" class="dice" hidden></div>
+        <div id="chooser" class="occupy" hidden>
+          <p class="occupy-label">Quantas tropas?</p>
+          <p id="chooser-hint" class="occupy-hint"></p>
+          <div id="chooser-btns" class="row"></div>
+          <div class="row">
+            <input id="chooser-n" type="number" min="1" value="1" />
+            <button type="button" id="chooser-ok" class="primary">OK</button>
+            <button type="button" id="chooser-cancel">Cancelar</button>
+          </div>
+        </div>
+        <div class="row placen" id="placen" hidden>
+          <span class="placen-label">posicionar:</span>
+          <button type="button" data-n="1" class="on">+1</button>
+          <button type="button" data-n="5">+5</button>
+          <button type="button" data-n="10">+10</button>
+          <button type="button" data-n="9999">tudo</button>
+        </div>
         <div id="occupy" class="occupy" hidden>
           <p class="occupy-label">Conquista — mova tropas</p>
           <p id="occupy-hint" class="occupy-hint"></p>

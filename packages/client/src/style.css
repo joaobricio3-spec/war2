@@ -507,6 +507,37 @@ button.primary {
   color: color-mix(in srgb, var(--oak) 80%, transparent);
 }
 
+.placen {
+  align-items: center;
+  font-size: 0.78rem;
+  color: var(--brass);
+}
+
+.placen[hidden] {
+  display: none;
+}
+
+.placen button {
+  min-height: 32px;
+  min-width: 40px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.78rem;
+}
+
+.placen button.on {
+  background: var(--brass);
+  color: var(--ink);
+}
+
+.occupy input[type="number"] {
+  font: inherit;
+  width: 4.5rem;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid var(--brass);
+  background: color-mix(in srgb, var(--ink) 55%, transparent);
+  color: var(--vellum);
+}
+
 .empty {
   margin: 0 0 0.6rem;
   font-size: 0.8rem;
