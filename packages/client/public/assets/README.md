@@ -1,6 +1,7 @@
 Arte original, sem referência a produtos Grow/Hasbro.
 
-- `world-relief.jpg` — relevo topográfico 1792×1008 gerado com Grok Imagine pelo dono do repo (não é scan de tabuleiro comercial). Fichas do Pixi usam este crop.
+- `world-board.jpg` — tabuleiro pintado 1536×760 (óleo/gouache), arte original gerada por IA a partir do relevo do repo
+- `land-mask.png` — máscara terra/mar do mesmo recorte, usada pelo Pixi para recortar as zonas dos territórios à costa.
 - `felt-table.png` — mesa de nogueira + feltro (overlay)
 - `vellum-grain.png` — fibra de velino
 - `compass-rose.png` — rosa dos ventos em latão

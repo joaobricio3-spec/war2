@@ -3,84 +3,60 @@ import { TERRITORIES } from "@war2/engine";
 
 export interface Layout {
   id: TerritoryId;
+  /** Flat [x0, y0, x1, y1, ...] in `WORLD` pixels. Overshoots the coast on purpose; the land mask clips it. */
   poly: number[];
+  /** Label / army disc anchor, guaranteed to sit on land inside `poly`. */
   cx: number;
   cy: number;
-  rx: number;
-  ry: number;
-  w: number;
-  h: number;
 }
 
-/** Pixel centers on `world-relief.jpg` (1792×1008, same crop as the Grok Imagine map). */
-const MARKERS: Record<TerritoryId, { cx: number; cy: number; rx: number; ry: number }> = {
-  alaska: { cx: 168, cy: 198, rx: 52, ry: 36 },
-  mackenzie: { cx: 300, cy: 155, rx: 70, ry: 40 },
-  groenlandia: { cx: 560, cy: 95, rx: 58, ry: 42 },
-  vancouver: { cx: 236, cy: 268, rx: 50, ry: 34 },
-  ottawa: { cx: 360, cy: 248, rx: 52, ry: 36 },
-  labrador: { cx: 468, cy: 228, rx: 44, ry: 32 },
-  california: { cx: 228, cy: 368, rx: 54, ry: 38 },
-  nova_york: { cx: 378, cy: 348, rx: 50, ry: 36 },
-  mexico: { cx: 286, cy: 458, rx: 48, ry: 34 },
-  venezuela: { cx: 392, cy: 538, rx: 42, ry: 30 },
-  bolivia: { cx: 348, cy: 628, rx: 40, ry: 36 },
-  brasil: { cx: 458, cy: 618, rx: 52, ry: 44 },
-  argentina: { cx: 400, cy: 748, rx: 40, ry: 48 },
-  islandia: { cx: 688, cy: 148, rx: 28, ry: 22 },
-  inglaterra: { cx: 758, cy: 228, rx: 32, ry: 24 },
-  suecia: { cx: 848, cy: 148, rx: 36, ry: 28 },
-  franca: { cx: 778, cy: 302, rx: 34, ry: 26 },
-  alemanha: { cx: 858, cy: 292, rx: 34, ry: 26 },
-  polonia: { cx: 918, cy: 238, rx: 34, ry: 26 },
-  moscou: { cx: 1024, cy: 188, rx: 52, ry: 36 },
-  argelia: { cx: 808, cy: 418, rx: 56, ry: 40 },
-  egito: { cx: 938, cy: 408, rx: 40, ry: 30 },
-  congo: { cx: 878, cy: 538, rx: 42, ry: 34 },
-  sudan: { cx: 978, cy: 508, rx: 44, ry: 36 },
-  africa_do_sul: { cx: 898, cy: 688, rx: 46, ry: 40 },
-  madagascar: { cx: 1048, cy: 688, rx: 28, ry: 32 },
-  oriente_medio: { cx: 1048, cy: 368, rx: 46, ry: 34 },
-  aral: { cx: 1148, cy: 318, rx: 42, ry: 32 },
-  omsk: { cx: 1158, cy: 188, rx: 46, ry: 32 },
-  siberia: { cx: 1290, cy: 148, rx: 60, ry: 36 },
-  dudinka: { cx: 1430, cy: 118, rx: 48, ry: 30 },
-  vladivostok: { cx: 1578, cy: 198, rx: 48, ry: 34 },
-  tchita: { cx: 1410, cy: 218, rx: 40, ry: 28 },
-  mongolia: { cx: 1370, cy: 288, rx: 46, ry: 30 },
-  japao: { cx: 1526, cy: 338, rx: 26, ry: 30 },
-  china: { cx: 1368, cy: 368, rx: 58, ry: 40 },
-  india: { cx: 1230, cy: 438, rx: 46, ry: 36 },
-  vietna: { cx: 1410, cy: 458, rx: 36, ry: 30 },
-  sumatra: { cx: 1390, cy: 548, rx: 36, ry: 26 },
-  borneo: { cx: 1488, cy: 548, rx: 34, ry: 26 },
-  nova_gine: { cx: 1574, cy: 572, rx: 34, ry: 24 },
-  australia: { cx: 1524, cy: 708, rx: 58, ry: 42 },
+/** Territory zones on `world-board.jpg` (1536×760). Same crop as `land-mask.png`. */
+const ZONES: Record<TerritoryId, { cx: number; cy: number; poly: number[] }> = {
+  argentina: { cx: 460, cy: 630, poly: [430, 600, 470, 610, 500, 590, 540, 600, 520, 660, 480, 720, 430, 720, 420, 660] },
+  bolivia: { cx: 449, cy: 510, poly: [400, 450, 420, 480, 470, 490, 480, 550, 500, 590, 470, 610, 430, 600, 410, 540] },
+  brasil: { cx: 524, cy: 529, poly: [470, 490, 540, 480, 560, 440, 620, 500, 600, 540, 540, 600, 500, 590, 480, 550] },
+  venezuela: { cx: 470, cy: 450, poly: [400, 440, 430, 440, 450, 410, 520, 415, 560, 440, 540, 480, 470, 490, 420, 480, 400, 450] },
+  mexico: { cx: 384, cy: 394, poly: [250, 390, 300, 390, 340, 380, 440, 360, 470, 380, 450, 410, 430, 440, 400, 440, 330, 430, 250, 415] },
+  california: { cx: 243, cy: 280, poly: [130, 260, 200, 280, 250, 260, 300, 360, 300, 390, 250, 390, 200, 340, 150, 300] },
+  nova_york: { cx: 310, cy: 305, poly: [250, 260, 370, 280, 400, 250, 440, 260, 500, 260, 480, 310, 440, 360, 340, 380, 300, 390, 300, 360] },
+  ottawa: { cx: 312, cy: 217, poly: [240, 165, 380, 165, 400, 250, 370, 280, 250, 260] },
+  vancouver: { cx: 217, cy: 189, poly: [110, 210, 140, 156, 240, 165, 250, 260, 200, 280, 140, 260] },
+  alaska: { cx: 93, cy: 144, poly: [0, 80, 150, 90, 160, 160, 140, 210, 110, 210, 0, 200] },
+  mackenzie: { cx: 282, cy: 139, poly: [150, 20, 400, 20, 400, 80, 380, 172, 150, 166] },
+  labrador: { cx: 435, cy: 230, poly: [400, 20, 470, 20, 470, 160, 520, 180, 530, 240, 440, 260, 400, 250, 380, 170, 400, 80] },
+  groenlandia: { cx: 638, cy: 80, poly: [470, 20, 770, 20, 720, 80, 680, 110, 650, 140, 600, 195, 520, 190, 470, 160] },
+  islandia: { cx: 673, cy: 148, poly: [650, 120, 720, 120, 720, 165, 650, 165] },
+  inglaterra: { cx: 749, cy: 209, poly: [700, 170, 770, 165, 770, 230, 700, 230] },
+  suecia: { cx: 878, cy: 164, poly: [770, 20, 900, 20, 900, 190, 860, 210, 800, 200, 770, 160] },
+  franca: { cx: 735, cy: 271, poly: [690, 230, 770, 230, 800, 220, 830, 260, 830, 290, 770, 305, 690, 310] },
+  alemanha: { cx: 853, cy: 237, poly: [800, 200, 860, 210, 880, 220, 890, 280, 870, 305, 830, 290, 830, 260, 800, 220] },
+  polonia: { cx: 904, cy: 215, poly: [860, 210, 900, 190, 960, 200, 970, 260, 1000, 280, 940, 310, 890, 280, 880, 220] },
+  moscou: { cx: 1008, cy: 181, poly: [900, 20, 1040, 20, 1060, 180, 1050, 260, 1000, 280, 970, 260, 960, 200, 900, 190] },
+  argelia: { cx: 787, cy: 366, poly: [690, 310, 770, 305, 830, 290, 870, 305, 850, 320, 850, 390, 850, 430, 800, 440, 700, 440, 680, 360] },
+  egito: { cx: 882, cy: 360, poly: [850, 320, 870, 305, 890, 280, 940, 310, 960, 360, 940, 400, 850, 390] },
+  sudan: { cx: 910, cy: 438, poly: [850, 390, 940, 400, 960, 360, 1010, 410, 990, 440, 940, 480, 930, 550, 880, 540, 900, 490, 850, 430] },
+  congo: { cx: 855, cy: 496, poly: [700, 440, 800, 440, 850, 430, 900, 490, 880, 540, 800, 550, 760, 490] },
+  africa_do_sul: { cx: 862, cy: 577, poly: [800, 550, 880, 540, 930, 550, 930, 620, 870, 650, 820, 610] },
+  madagascar: { cx: 962, cy: 538, poly: [935, 490, 990, 490, 990, 585, 935, 585] },
+  oriente_medio: { cx: 1036, cy: 305, poly: [940, 310, 1000, 280, 1050, 260, 1080, 300, 1100, 360, 1080, 400, 1010, 410, 960, 360] },
+  aral: { cx: 1107, cy: 239, poly: [1050, 260, 1060, 180, 1150, 190, 1230, 210, 1230, 260, 1150, 270, 1130, 340, 1090, 340, 1080, 300] },
+  omsk: { cx: 1114, cy: 148, poly: [1040, 20, 1150, 20, 1150, 190, 1060, 180] },
+  dudinka: { cx: 1320, cy: 147, poly: [1260, 20, 1400, 20, 1400, 150, 1320, 180, 1270, 160] },
+  siberia: { cx: 1207, cy: 144, poly: [1150, 20, 1260, 20, 1270, 160, 1230, 210, 1150, 190] },
+  tchita: { cx: 1278, cy: 192, poly: [1270, 160, 1320, 180, 1400, 150, 1380, 200, 1330, 230, 1230, 210] },
+  mongolia: { cx: 1254, cy: 239, poly: [1230, 210, 1330, 230, 1380, 200, 1400, 220, 1380, 260, 1300, 270, 1230, 260] },
+  vladivostok: { cx: 1460, cy: 148, poly: [1400, 20, 1536, 20, 1536, 200, 1450, 240, 1400, 220, 1380, 200, 1400, 150] },
+  china: { cx: 1200, cy: 314, poly: [1130, 340, 1150, 270, 1230, 260, 1300, 270, 1330, 300, 1290, 360, 1250, 380, 1180, 360] },
+  japao: { cx: 1337, cy: 245, poly: [1330, 240, 1400, 220, 1400, 300, 1330, 300] },
+  india: { cx: 1115, cy: 356, poly: [1090, 340, 1130, 340, 1180, 360, 1160, 430, 1130, 480, 1100, 430, 1080, 400, 1100, 360] },
+  vietna: { cx: 1203, cy: 384, poly: [1180, 360, 1250, 380, 1290, 360, 1300, 400, 1260, 440, 1210, 460, 1160, 430] },
+  sumatra: { cx: 1215, cy: 478, poly: [1160, 430, 1210, 460, 1260, 440, 1250, 520, 1150, 520] },
+  borneo: { cx: 1298, cy: 472, poly: [1250, 360, 1340, 360, 1340, 500, 1250, 500, 1250, 440, 1260, 440] },
+  nova_gine: { cx: 1368, cy: 485, poly: [1340, 430, 1450, 430, 1450, 520, 1340, 520] },
+  australia: { cx: 1365, cy: 577, poly: [1250, 520, 1440, 520, 1450, 660, 1250, 660] },
 };
 
-function ellipsePoly(cx: number, cy: number, rx: number, ry: number): number[] {
-  const n = 20;
-  const poly: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const t = (i / n) * Math.PI * 2;
-    poly.push(cx + Math.cos(t) * rx, cy + Math.sin(t) * ry);
-  }
-  return poly;
-}
-
-export const LAYOUT: Layout[] = TERRITORIES.map((t) => {
-  const m = MARKERS[t.id];
-  return {
-    id: t.id,
-    poly: ellipsePoly(m.cx, m.cy, m.rx, m.ry),
-    cx: m.cx,
-    cy: m.cy,
-    rx: m.rx,
-    ry: m.ry,
-    w: m.rx * 2,
-    h: m.ry * 2,
-  };
-});
+export const LAYOUT: Layout[] = TERRITORIES.map((t) => ({ id: t.id, ...ZONES[t.id] }));
 
 export const LAYOUT_BY_ID = Object.fromEntries(LAYOUT.map((l) => [l.id, l])) as Record<
   TerritoryId,
@@ -94,4 +70,4 @@ export const SEA_LANES: [TerritoryId, TerritoryId][] = [
   ["india", "sumatra"],
 ];
 
-export const WORLD = { width: 1792, height: 1008 };
+export const WORLD = { width: 1536, height: 760 };

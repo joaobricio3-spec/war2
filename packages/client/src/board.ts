@@ -1,4 +1,13 @@
-import { Application, Assets, Container, Graphics, Sprite, Text, Texture } from "pixi.js";
+import {
+  Application,
+  Assets,
+  Container,
+  Graphics,
+  Polygon,
+  Sprite,
+  Text,
+  Texture,
+} from "pixi.js";
 import {
   TERRITORY_BY_ID,
   type GameState,
@@ -17,7 +26,8 @@ const CHIP: Record<string, number> = {
 };
 
 type Cell = {
-  glow: Graphics;
+  fill: Graphics;
+  border: Graphics;
   name: Text;
   disc: Graphics;
   count: Text;
@@ -39,7 +49,8 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   app.ticker.maxFPS = 0;
   host.appendChild(app.canvas);
 
-  const mapTex = await Assets.load<Texture>("/assets/world-relief.jpg");
+  const mapTex = await Assets.load<Texture>("/assets/world-board.jpg");
+  const maskTex = await Assets.load<Texture>("/assets/land-mask.png");
 
   const world = new Container();
   app.stage.addChild(world);
@@ -49,6 +60,29 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   relief.height = WORLD.height;
   relief.eventMode = "none";
   world.addChild(relief);
+
+  const landMask = new Sprite(maskTex);
+  landMask.width = WORLD.width;
+  landMask.height = WORLD.height;
+  world.addChild(landMask);
+
+  const zones = new Container();
+  zones.mask = landMask;
+  world.addChild(zones);
+
+  const cells = new Map<TerritoryId, Cell>();
+  for (const l of LAYOUT) {
+    const fill = new Graphics();
+    const border = new Graphics();
+    zones.addChild(fill, border);
+    cells.set(l.id, {
+      fill,
+      border,
+      name: new Text(),
+      disc: new Graphics(),
+      count: new Text(),
+    });
+  }
 
   const lanes = new Graphics();
   world.addChild(lanes);
@@ -62,39 +96,32 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   }
   lanes.stroke({ width: 1.25, color: 0x6a8aaa, alpha: 0.35 });
 
-  const cells = new Map<TerritoryId, Cell>();
   let panned = false;
 
   for (const l of LAYOUT) {
     const cell = new Container();
     cell.eventMode = "static";
     cell.cursor = "pointer";
-    cell.hitArea = {
-      contains(x: number, y: number) {
-        const dx = (x - l.cx) / l.rx;
-        const dy = (y - l.cy) / l.ry;
-        return dx * dx + dy * dy <= 1;
-      },
-    };
+    cell.hitArea = new Polygon(l.poly);
     cell.on("pointertap", () => {
       if (panned) return;
       hooks.onTerritory(l.id);
     });
 
-    const glow = new Graphics();
     const name = new Text({
       text: TERRITORY_BY_ID[l.id].name,
       style: {
         fontFamily: 'Figtree, Candara, "Segoe UI", sans-serif',
         fontSize: 10,
-        fill: 0xd9d4c8,
+        fill: 0xf7f1e3,
+        stroke: { color: 0x1a100a, width: 3 },
         align: "center",
         fontWeight: "600",
       },
     });
     name.anchor.set(0.5, 1);
-    name.position.set(l.cx, l.cy - 20);
-    name.alpha = 0.72;
+    name.position.set(l.cx, l.cy - 22);
+    name.alpha = 0.85;
 
     const disc = new Graphics();
     const count = new Text({
@@ -109,9 +136,12 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     count.anchor.set(0.5);
     count.position.set(l.cx, l.cy);
 
-    cell.addChild(glow, name, disc, count);
+    cell.addChild(name, disc, count);
     world.addChild(cell);
-    cells.set(l.id, { glow, name, disc, count });
+    const zone = cells.get(l.id)!;
+    zone.name = name;
+    zone.disc = disc;
+    zone.count = count;
   }
 
   const fitWorld = () => {
@@ -170,22 +200,24 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
       const mine = occ.ownerId === viewer;
       const on = selected === l.id;
 
-      cell.glow.clear();
-      cell.glow.ellipse(l.cx, l.cy, l.rx, l.ry);
-      cell.glow.fill({ color, alpha: on ? 0.28 : mine ? 0.16 : 0.1 });
-      cell.glow.ellipse(l.cx, l.cy, l.rx, l.ry);
-      cell.glow.stroke({
-        width: on ? 2.4 : 1.2,
-        color: on ? 0xf0c987 : color,
-        alpha: on ? 0.95 : 0.45,
+      cell.fill.clear();
+      cell.fill.poly(l.poly);
+      cell.fill.fill({ color, alpha: on ? 0.62 : mine ? 0.46 : 0.36 });
+
+      cell.border.clear();
+      cell.border.poly(l.poly);
+      cell.border.stroke({
+        width: on ? 3 : 1.4,
+        color: on ? 0xf0c987 : 0x1a100a,
+        alpha: on ? 1 : 0.55,
       });
 
       cell.disc.clear();
-      cell.disc.circle(l.cx, l.cy, 15);
+      cell.disc.circle(l.cx, l.cy, 14);
       cell.disc.fill({ color: 0x090b0e, alpha: 0.92 });
       cell.disc.stroke({ width: 2.5, color, alpha: 1 });
       cell.count.text = String(occ.armies);
-      cell.name.alpha = on ? 1 : 0.62;
+      cell.name.alpha = on ? 1 : 0.85;
     }
   }
 
