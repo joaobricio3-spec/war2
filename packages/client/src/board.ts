@@ -52,6 +52,22 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   const mapTex = await Assets.load<Texture>("/assets/world-board.jpg");
   const maskTex = await Assets.load<Texture>("/assets/land-mask.png");
 
+  const maskImg = new Image();
+  maskImg.src = "/assets/land-mask.png";
+  await maskImg.decode();
+  const maskCanvas = document.createElement("canvas");
+  maskCanvas.width = WORLD.width;
+  maskCanvas.height = WORLD.height;
+  const maskCtx = maskCanvas.getContext("2d")!;
+  maskCtx.drawImage(maskImg, 0, 0);
+  const maskData = maskCtx.getImageData(0, 0, WORLD.width, WORLD.height).data;
+  const onLand = (x: number, y: number) => {
+    const ix = Math.round(x);
+    const iy = Math.round(y);
+    if (ix < 0 || iy < 0 || ix >= WORLD.width || iy >= WORLD.height) return false;
+    return (maskData[(iy * WORLD.width + ix) * 4] ?? 0) > 127;
+  };
+
   const world = new Container();
   app.stage.addChild(world);
 
@@ -102,7 +118,10 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     const cell = new Container();
     cell.eventMode = "static";
     cell.cursor = "pointer";
-    cell.hitArea = new Polygon(l.poly);
+    const hitPoly = new Polygon(l.poly);
+    cell.hitArea = {
+      contains: (x: number, y: number) => hitPoly.contains(x, y) && onLand(x, y),
+    };
     cell.on("pointertap", () => {
       if (panned) return;
       hooks.onTerritory(l.id);

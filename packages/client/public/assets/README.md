@@ -1,7 +1,7 @@
 Arte original, sem referência a produtos Grow/Hasbro.
 
-- `world-board.jpg` — tabuleiro pintado 1536×760 (óleo/gouache), arte original gerada por IA a partir do relevo do repo
-- `land-mask.png` — máscara terra/mar do mesmo recorte, usada pelo Pixi para recortar as zonas dos territórios à costa.
+- `world-board.jpg` — tabuleiro estilo arcade 1536×760 (continentes em cores planas vibrantes sobre oceano navy), arte original gerada por IA
+- `land-mask.png` — máscara terra/mar do mesmo recorte, usada pelo Pixi para recortar as zonas dos territórios à costa e pelo hit-test (cliques no oceano não selecionam territórios).
 - `card-circle.png` — emblema circular de carta em latão, arte original gerada por IA
 - `card-triangle.png` — emblema triangular de carta em latão, arte original gerada por IA
 - `card-square.png` — emblema quadrado de carta em latão, arte original gerada por IA
