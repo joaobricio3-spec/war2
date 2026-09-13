@@ -649,6 +649,9 @@ function updateDice() {
       return;
     }
     ui.lobby.hidden = false;
+    // O lobby mora dentro de <details> — se estiver recolhido parece que o
+    // join falhou.
+    (document.querySelector("#netmodes") as HTMLDetailsElement | null)?.setAttribute("open", "");
     ui.lobbyCode.textContent = roomCode;
     if (players) {
       ui.lobbyPlayers.innerHTML = "";
@@ -664,12 +667,15 @@ function updateDice() {
       : "Aguardando o host iniciar…";
   }
 
+  let lastOccupyKey = "";
+
   function paintOccupy(s: GameState, me: PlayerId) {
     const pend = s.pendingOccupy;
     const mine = s.currentPlayerId === me && !aiThinking;
     if (!pend || !mine) {
       ui.occupy.hidden = true;
       ui.occupyBtns.innerHTML = "";
+      lastOccupyKey = "";
       return;
     }
     ui.occupy.hidden = false;
@@ -677,6 +683,11 @@ function updateDice() {
     ui.status.textContent = "Conquista — ocupe o território";
     ui.status.dataset.tone = "you";
     ui.occupyHint.textContent = `${tName(pend.to)}: ${pend.minArmies} a ${pend.maxArmies} exércitos (1 fica na origem)`;
+    // Rebuild só quando a janela muda — conquista de 60 exércitos geraria
+    // 59 botões por repaint.
+    const key = `${pend.to}:${pend.minArmies}:${pend.maxArmies}`;
+    if (key === lastOccupyKey) return;
+    lastOccupyKey = key;
     ui.occupyBtns.innerHTML = "";
     for (let n = pend.minArmies; n <= pend.maxArmies; n++) {
       const b = document.createElement("button");
@@ -888,6 +899,7 @@ function updateDice() {
     ui.gameover.hidden = true;
     ui.loading.hidden = true;
     ui.help.hidden = true;
+    cancelDice();
     ui.dice.hidden = true;
     ui.dice.innerHTML = "";
   }
