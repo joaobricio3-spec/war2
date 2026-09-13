@@ -198,6 +198,7 @@ async function main() {
   let roomCode = "";
   let netId: PlayerId = "";
   let netHost = false;
+  let netPlayers: { playerId: string; connected: boolean }[] = [];
 
   // campaign state
   let humanId: PlayerId = "p1";
@@ -539,7 +540,12 @@ function updateDice() {
       li.dataset.color = p.color;
       if (p.id === s.currentPlayerId) li.dataset.turn = "1";
       if (!p.alive) li.dataset.dead = "1";
-      const who = p.id === me && mode !== "hotseat" ? `${p.nickname} (você)` : p.nickname;
+      const offline =
+        mode === "net" &&
+        netPlayers.some((np) => np.playerId === p.id && !np.connected);
+      const who =
+        (p.id === me && mode !== "hotseat" ? `${p.nickname} (você)` : p.nickname) +
+        (offline ? " (offline)" : "");
       li.innerHTML = `<i></i><span></span><em>${territories}t · ${p.cards.length}c</em>`;
       li.querySelector("span")!.textContent = who;
       ui.roster.append(li);
@@ -1050,6 +1056,7 @@ function updateDice() {
         roomCode = msg.roomCode;
         netId = msg.playerId;
         netHost = msg.host;
+        netPlayers = msg.players;
         mode = "net";
         state = msg.state;
         ui.error.textContent = "";
@@ -1068,6 +1075,7 @@ function updateDice() {
       }
       if (msg.type === "room") {
         netHost = msg.host;
+        netPlayers = msg.players;
         if (msg.state) {
           state = msg.state;
           ui.error.textContent = "";
