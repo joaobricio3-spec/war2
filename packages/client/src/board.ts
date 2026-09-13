@@ -62,7 +62,7 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   app.ticker.maxFPS = 0;
   host.appendChild(app.canvas);
 
-  const mapTex = await Assets.load<Texture>("/assets/world-board-v2.jpg");
+  const mapTex = await Assets.load<Texture>("/assets/world-board-v3.jpg");
 
   const world = new Container();
   app.stage.addChild(world);
@@ -345,10 +345,11 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
       cell.glow.poly(l.poly);
       cell.glow.stroke({
         // Selected origin is warm gold; legal destinations are cool cyan so
-        // "o que é origem" e "para onde posso ir" não se confundem.
-        width: on ? 3 : target ? 2.5 : 1.4,
+        // "o que é origem" e "para onde posso ir" não se confundem. O traço
+        // de repouso é quase invisível — a costa pintada já lê o território.
+        width: on ? 3 : target ? 2.5 : 1.1,
         color: on ? 0xffd76a : target ? 0x6ec6ff : 0x1c140c,
-        alpha: on || target ? 0.95 : 0.55,
+        alpha: on || target ? 0.95 : 0.34,
       });
 
       cell.disc.clear();

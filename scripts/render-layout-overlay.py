@@ -7,6 +7,7 @@ SEA_LANES as straight connectors between centroids.
 
 Usage: python scripts/render-layout-overlay.py [tag]
 """
+import os
 import re
 import sys
 from pathlib import Path
@@ -15,7 +16,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
 LAYOUT_TS = ROOT / "packages/client/src/layout.ts"
-BOARD = ROOT / "packages/client/public/assets/world-board-v2.jpg"
+BOARD = ROOT / os.environ.get(
+    "WAR2_BOARD", "packages/client/public/assets/world-board-v2.jpg"
+)
 
 src = LAYOUT_TS.read_text(encoding="utf-8")
 

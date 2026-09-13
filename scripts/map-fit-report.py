@@ -11,6 +11,7 @@ Prints a table worst-first. Exit 0 always; this is a report, not a gate.
 Usage: python scripts/map-fit-report.py [--json]
 """
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -19,7 +20,9 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
 LAYOUT_TS = ROOT / "packages/client/src/layout.ts"
-BOARD = ROOT / "packages/client/public/assets/world-board-v2.jpg"
+BOARD = ROOT / os.environ.get(
+    "WAR2_BOARD", "packages/client/public/assets/world-board-v2.jpg"
+)
 
 # Hand-picked (x, y) on the 1536×1024 art.
 LAND = [
