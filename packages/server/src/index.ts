@@ -440,7 +440,14 @@ function handle(client: Client, raw: string) {
   send(client.ws, { type: "error", message: "tipo de mensagem desconhecido" });
 }
 
-export function startServer(port: number) {
+export function startServer(
+  port: number,
+  opts?: { rateMaxMsgs?: number; rateWindowMs?: number },
+) {
+  // Testes podem afrouxar o limite para não pagar o pacing real; produção
+  // mantém os defaults RATE_*.
+  const rateMax = opts?.rateMaxMsgs ?? RATE_MAX_MSGS;
+  const rateWindow = opts?.rateWindowMs ?? RATE_WINDOW_MS;
   const wss = new WebSocketServer({ port, path: "/ws", maxPayload: MAX_PAYLOAD_BYTES });
   wss.on("error", () => {
     /* porta em uso / erros de transporte — não derruba o processo */
@@ -461,12 +468,12 @@ export function startServer(port: number) {
     });
     ws.on("message", (data) => {
       const now = Date.now();
-      if (now - client.windowStart > RATE_WINDOW_MS) {
+      if (now - client.windowStart > rateWindow) {
         client.windowStart = now;
         client.msgCount = 0;
       }
       client.msgCount += 1;
-      if (client.msgCount > RATE_MAX_MSGS) {
+      if (client.msgCount > rateMax) {
         send(ws, { type: "error", message: "limite de mensagens excedido" });
         ws.terminate();
         return;

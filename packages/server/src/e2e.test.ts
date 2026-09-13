@@ -14,12 +14,13 @@ import { startServer } from "./index.ts";
  * real `startServer` instance, choosing actions straight out of
  * `listLegalActions` on the per-player masked view broadcast by the server.
  *
- * The server rate-limits each socket to 40 msgs / 5s (see RATE_* in index.ts),
- * so every send goes through a rolling-window pacer with headroom.
+ * The server rate-limits each socket to 40 msgs / 5s (see RATE_* in index.ts).
+ * The gauntlet starts it with a raised limit so sends flow immediately — the
+ * pacing code path stays exercised, just without wall-clock waits.
  */
 
 const RATE_WINDOW_MS = 5_000;
-const RATE_LIMIT = 30; // stay safely under the server's 40/5s
+const RATE_LIMIT = 100_000; // servidor do teste aceita burst; produção mantém 40/5s
 const STALL_MS = 30_000;
 
 type Welcome = Extract<S2C, { type: "welcome" }>;
@@ -158,7 +159,7 @@ describe("e2e gauntlet", () => {
   it(
     "plays a full match between two sockets until phase over",
     async () => {
-      const wss = startServer(0);
+      const wss = startServer(0, { rateMaxMsgs: 1_000_000 });
       const port = (wss.address() as { port: number }).port;
       const url = `ws://127.0.0.1:${port}/ws`;
       const startedAt = Date.now();
