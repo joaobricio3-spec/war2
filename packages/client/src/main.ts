@@ -120,9 +120,31 @@ function loadCampaign(): SavedCampaign | null {
     if (!s || typeof s !== "object") return null;
     if (!Array.isArray(s.players) || s.players.length < 2) return null;
     if (!s.players.some((p) => p.id === d.humanId)) return null;
-    if (typeof s.territories !== "object" || Object.keys(s.territories).length !== 42)
+    // Turn must belong to a live player, or the AI loop waits forever.
+    if (!s.players.some((p) => p.id === s.currentPlayerId && p.alive)) return null;
+    // Territory map must be exactly the 42 canonical ids.
+    const tids = Object.keys(s.territories ?? {});
+    if (tids.length !== 42 || !tids.every((id) => Object.hasOwn(TERRITORY_BY_ID, id)))
       return null;
     if (!PHASES.has(s.phase)) return null;
+    // pendingOccupy: valid ids and a non-empty [min,max] window, else the
+    // occupy panel renders zero buttons and everything else is blocked.
+    const po = s.pendingOccupy;
+    if (po != null) {
+      if (typeof po !== "object") return null;
+      if (!Object.hasOwn(TERRITORY_BY_ID, po.from) || !Object.hasOwn(TERRITORY_BY_ID, po.to))
+        return null;
+      if (
+        !Number.isInteger(po.minArmies) ||
+        !Number.isInteger(po.maxArmies) ||
+        po.minArmies < 1 ||
+        po.minArmies > po.maxArmies
+      )
+        return null;
+    }
+    // Every non-human player needs an AI entry, or maybeRunAI parks on them.
+    const aiIds = new Set(Array.isArray(d.ai) ? d.ai.map(([id]) => id) : []);
+    if (!s.players.every((p) => p.id === d.humanId || aiIds.has(p.id))) return null;
     if (!Array.isArray(d.ai) || !d.ai.every(([id, dd]) => typeof id === "string" && DIFFS.has(dd)))
       return null;
     return d;
@@ -451,12 +473,19 @@ function updateDice() {
     paintRoster(s, me);
 
     const mineCards = p?.cards ?? [];
+    // Repaints (broadcasts de roster/state) não devem zerar o trio escolhido.
+    const picked = new Set(
+      [...ui.cards.querySelectorAll("button.on")].map(
+        (el) => (el as HTMLElement).dataset.card,
+      ),
+    );
     ui.cards.innerHTML = "";
     ui.cardsEmpty.hidden = mineCards.length > 0;
     for (const c of mineCards) {
       const b = document.createElement("button");
       b.type = "button";
       b.dataset.card = c.id;
+      if (picked.has(c.id)) b.classList.add("on");
       const image = document.createElement("img");
       image.src = `/assets/card-${c.shape}.png`;
       image.alt = "";
@@ -471,7 +500,12 @@ function updateDice() {
       s.currentPlayerId === me &&
       s.phase !== "over" &&
       !(mode === "campaign" && aiThinking);
-    ui.end.disabled = !humanTurn || !!s.pendingOccupy || s.phase === "setup_place";
+    ui.end.disabled =
+      !humanTurn ||
+      !!s.pendingOccupy ||
+      s.phase === "setup_place" ||
+      s.mustTrade ||
+      (s.phase === "reinforce" && pool > 0);
     ui.trade.disabled =
       !humanTurn || !!s.pendingOccupy || !(s.phase === "reinforce" || s.mustTrade);
     ui.placen.hidden =
@@ -626,15 +660,21 @@ function updateDice() {
     aiTimer = window.setTimeout(stepAI, reducedMotion ? 8 : setup ? 36 : 160);
   }
 
+  // Last-resort move: the engine guarantees ≥1 legal action for the player on
+  // turn, so walk listLegalActions until one applies (covers occupy/trade too).
   function aiFallback(pid: PlayerId): boolean {
     if (!state) return false;
-    for (const t of ["endTurn", "endAttack", "endReinforce"] as const) {
-      const r = reduce(state, { type: t, playerId: pid } as Action, rng);
-      if (r.ok) {
-        state = r.state;
-        saveCampaign();
-        return true;
+    try {
+      for (const a of listLegalActions(state, pid)) {
+        const r = reduce(state, a, rng);
+        if (r.ok) {
+          state = r.state;
+          saveCampaign();
+          return true;
+        }
       }
+    } catch {
+      /* corrupt state — caller halts the loop */
     }
     return false;
   }
@@ -643,8 +683,31 @@ function updateDice() {
     aiTimer = null;
     if (mode !== "campaign" || !state) return;
     const pid = state.currentPlayerId;
+    try {
+      stepAIInner(pid);
+    } catch {
+      // Engine threw on a corrupt/unexpected state — recover via fallback or halt.
+      if (!aiFallback(pid)) {
+        aiThinking = false;
+        paint();
+        return;
+      }
+      if (state.phase === "over") {
+        onGameOver();
+        return;
+      }
+      if (aiPlayers.has(state.currentPlayerId)) {
+        aiTimer = window.setTimeout(stepAI, reducedMotion ? 8 : 200);
+      } else {
+        aiThinking = false;
+        paint();
+      }
+    }
+  }
+
+  function stepAIInner(pid: PlayerId) {
     const diff = aiPlayers.get(pid);
-    if (!diff) {
+    if (!diff || !state) {
       aiThinking = false;
       paint();
       return;
@@ -654,7 +717,7 @@ function updateDice() {
     let halted = false;
     if (!action) {
       halted = !aiFallback(pid);
-      if (halted) log(`IA ${nick} sem jogada legal — turno travado`);
+      if (halted) log(`IA ${nick} sem jogada legal — turno travado (use Abandonar)`);
     } else {
       const r = reduce(state, action, rng);
       if (r.ok) {
@@ -663,7 +726,7 @@ function updateDice() {
         log(`${nick}: ${describeAction(action)}`);
       } else {
         halted = !aiFallback(pid);
-        if (halted) log(`IA ${nick} travou (${r.error})`);
+        if (halted) log(`IA ${nick} travou (${r.error}) — use Abandonar`);
       }
     }
     paint();
@@ -744,6 +807,9 @@ function updateDice() {
     ui.overlay.hidden = true;
     ui.loading.hidden = false;
     window.setTimeout(() => {
+      // Se o usuário abriu outro modo nos ~40ms de espera, não aterrissa a
+      // campanha por cima.
+      if (mode !== "campaign") return;
       // Campaign: human places first in setup and takes turn 1 after it.
       state = createGame({ players, rng, firstPlayerId: humanId });
       selected = null;
@@ -1005,7 +1071,8 @@ function updateDice() {
         if (msg.state) {
           state = msg.state;
           ui.error.textContent = "";
-          hideChooser();
+          // Sem hideChooser: broadcasts de roster (reconnect de terceiros)
+          // não devem cancelar uma decisão de ataque em curso.
           if (msg.state.phase === "over") onGameOver();
           else {
             hideOverlays();
@@ -1020,6 +1087,7 @@ function updateDice() {
         state = msg.state;
         ui.error.textContent = "";
         hideChooser();
+        selected = null; // seleção pode apontar p/ território que mudou de dono
         if (state.phase === "over") {
           onGameOver();
           return;

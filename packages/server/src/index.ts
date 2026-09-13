@@ -1,6 +1,8 @@
 import {
+  aiChooseAction,
   createGame,
   createSeededRng,
+  listLegalActions,
   reduce,
   viewFor,
   type Action,
@@ -41,9 +43,73 @@ type Room = {
   hostId: PlayerId;
   seats: Seat[];
   state: GameState | null;
+  lastTouched: number;
 };
 
 const rooms = new Map<string, Room>();
+const aiTimers = new Map<string, NodeJS.Timeout>();
+const STALE_ROOM_MS = 2 * 60 * 60 * 1000;
+
+const seatOnline = (seat: Seat | undefined): boolean =>
+  !!seat?.ws && seat.ws.readyState === WebSocket.OPEN;
+
+const onlineSeats = (room: Room) =>
+  room.seats.filter((s) => s.ws !== null && s.ws.readyState === WebSocket.OPEN);
+
+/**
+ * Quando o jogador da vez está desconectado, o server joga por ele (IA oficial)
+ * até reconectar — um rage-quit não pode congelar a partida dos demais.
+ */
+function scheduleAutopilot(room: Room) {
+  if (!room.state || room.state.phase === "over") return;
+  const seat = room.seats.find((s) => s.playerId === room.state!.currentPlayerId);
+  if (!seat || seatOnline(seat)) return;
+  if (aiTimers.has(room.code)) return;
+  // Setup coloca 1 tropa por action — passo curto para não arrastar o lobby.
+  const delay = room.state.phase === "setup_place" ? 60 : 900;
+  aiTimers.set(
+    room.code,
+    setTimeout(() => {
+      aiTimers.delete(room.code);
+      autopilotStep(room);
+    }, delay),
+  );
+}
+
+function autopilotStep(room: Room) {
+  if (rooms.get(room.code) !== room) return;
+  const s = room.state;
+  if (!s || s.phase === "over") {
+    gcOrBroadcast(room);
+    return;
+  }
+  const seat = room.seats.find((x) => x.playerId === s.currentPlayerId);
+  if (!seat || seatOnline(seat)) return; // reconectou — humano reassume
+  const rng = createSeededRng(
+    (Date.now() ^ Number.parseInt(randomBytes(4).toString("hex"), 16)) >>> 0,
+  );
+  let next: GameState | null = null;
+  const chosen = aiChooseAction(s, s.currentPlayerId, "oficial");
+  if (chosen) {
+    const r = reduce(s, chosen, rng);
+    if (r.ok) next = r.state;
+  }
+  if (!next) {
+    for (const a of listLegalActions(s, s.currentPlayerId)) {
+      const r = reduce(s, a, rng);
+      if (r.ok) {
+        next = r.state;
+        break;
+      }
+    }
+  }
+  if (!next) return;
+  room.state = next;
+  room.lastTouched = Date.now();
+  if (room.state.phase === "over") room.seats = onlineSeats(room);
+  broadcastState(room);
+  scheduleAutopilot(room);
+}
 
 function code6(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -89,7 +155,14 @@ function broadcastState(room: Room) {
 /** Deletes the room when nobody is connected; otherwise broadcasts roster. */
 function gcOrBroadcast(room: Room) {
   if (room.seats.every((s) => s.ws === null || s.ws.readyState !== WebSocket.OPEN)) {
-    rooms.delete(room.code);
+    // Sala mid-game sobrevive à queda coletiva: o autopilot segue a partida e
+    // os tokens continuam valendo para reconnect. O sweep apaga as inertes.
+    if (!room.state || room.state.phase === "over") {
+      const t = aiTimers.get(room.code);
+      if (t) clearTimeout(t);
+      aiTimers.delete(room.code);
+      rooms.delete(room.code);
+    }
     return;
   }
   broadcastRoom(room);
@@ -122,6 +195,7 @@ function detach(client: Client) {
   else prev.seats.splice(idx, 1);
   migrateHostIfNeeded(prev);
   gcOrBroadcast(prev);
+  scheduleAutopilot(prev);
 }
 
 function welcome(room: Room, seat: Seat, host: boolean) {
@@ -212,7 +286,13 @@ function handle(client: Client, raw: string) {
       color: COLORS[0]!,
       ws: client.ws,
     };
-    const room: Room = { code, hostId: playerId, seats: [seat], state: null };
+    const room: Room = {
+      code,
+      hostId: playerId,
+      seats: [seat],
+      state: null,
+      lastTouched: Date.now(),
+    };
     rooms.set(code, room);
     client.roomCode = code;
     client.playerId = playerId;
@@ -293,6 +373,7 @@ function handle(client: Client, raw: string) {
     send(client.ws, { type: "error", message: "entre numa sala" });
     return;
   }
+  room.lastTouched = Date.now();
 
   if (msg.type === "leave") {
     detach(client);
@@ -323,6 +404,7 @@ function handle(client: Client, raw: string) {
     startGame(room);
     broadcastState(room);
     broadcastRoom(room);
+    scheduleAutopilot(room);
     return;
   }
 
@@ -349,7 +431,9 @@ function handle(client: Client, raw: string) {
       return;
     }
     room.state = result.state;
+    if (room.state.phase === "over") room.seats = onlineSeats(room);
     broadcastState(room);
+    scheduleAutopilot(room);
     return;
   }
 
@@ -409,6 +493,7 @@ export function startServer(port: number) {
       else room.seats.splice(idx, 1);
       migrateHostIfNeeded(room);
       gcOrBroadcast(room);
+      scheduleAutopilot(room);
     });
   });
   const heartbeat = setInterval(() => {
@@ -420,6 +505,15 @@ export function startServer(port: number) {
       }
       if (c) c.isAlive = false;
       ws.ping();
+    }
+    const now = Date.now();
+    for (const room of rooms.values()) {
+      if (now - room.lastTouched <= STALE_ROOM_MS) continue;
+      const t = aiTimers.get(room.code);
+      if (t) clearTimeout(t);
+      aiTimers.delete(room.code);
+      for (const s of room.seats) s.ws?.close();
+      rooms.delete(room.code);
     }
   }, HEARTBEAT_MS);
   wss.on("close", () => clearInterval(heartbeat));

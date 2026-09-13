@@ -13,10 +13,14 @@ function onceMessage(ws: WebSocket): Promise<S2C> {
   });
 }
 
-/** Resolves with the first message matching `pred` (4s timeout). */
-function waitFor(ws: WebSocket, pred: (m: S2C) => boolean): Promise<S2C> {
+/** Resolves with the first message matching `pred`. */
+function waitFor(
+  ws: WebSocket,
+  pred: (m: S2C) => boolean,
+  timeoutMs = 4000,
+): Promise<S2C> {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error("waitFor timeout")), 4000);
+    const t = setTimeout(() => reject(new Error("waitFor timeout")), timeoutMs);
     const onMsg = (data: WebSocket.RawData) => {
       const msg = JSON.parse(String(data)) as S2C;
       if (pred(msg)) {
@@ -247,6 +251,45 @@ describe("friend rooms", () => {
     late.ws.close();
     await new Promise<void>((resolve) => wss.close(() => resolve()));
   });
+
+  it("autopilot plays for a disconnected player so the match never freezes", async () => {
+    const wss = startServer(0);
+    const port = (wss.address() as { port: number }).port;
+    const url = `ws://127.0.0.1:${port}/ws`;
+
+    const host = new WebSocket(url);
+    await new Promise((r) => host.once("open", r));
+    host.send(JSON.stringify({ type: "create", nickname: "Ana" }));
+    const welcome = await onceMessage(host);
+    if (welcome.type !== "welcome") throw new Error("no welcome");
+
+    const guest = await joinRoom(url, welcome.roomCode, "Bia");
+    if (guest.welcome.type !== "welcome") throw new Error("no welcome");
+
+    host.send(JSON.stringify({ type: "start" }));
+    const started = (await waitFor(host, (m) => m.type === "state")) as Extract<
+      S2C,
+      { type: "state" }
+    >;
+    const firstPid = started.state.currentPlayerId;
+    const quitter = firstPid === welcome.playerId ? host : guest.ws;
+    const watcher = firstPid === welcome.playerId ? guest.ws : host;
+
+    // The player whose turn it is rage-quits mid-game.
+    quitter.close();
+
+    // Autopilot must take their turn and pass it (setup is 1 army/step).
+    const advanced = (await waitFor(
+      watcher,
+      (m) => m.type === "state" && m.state.currentPlayerId !== firstPid,
+      15_000,
+    )) as Extract<S2C, { type: "state" }>;
+    expect(advanced.state.currentPlayerId).not.toBe(firstPid);
+
+    host.close();
+    guest.ws.close();
+    await new Promise<void>((resolve) => wss.close(() => resolve()));
+  }, 30_000);
 
   it("leave frees the seat, migrates host, and empties the room", async () => {
     const wss = startServer(0);
