@@ -62,6 +62,6 @@ Complemento de `classic.md`. Cada item tem (ou deve ter) teste em `@war2/engine`
 
 - O server não inventa regra. Snapshot completo no servidor; o client da vez vê o próprio objetivo e as próprias cartas; os outros objetivos/cartas vêm mascarados via `viewFor`.
 - Assento desconectado mid-game é preservado para reconnect por token; no lobby ele é removido.
-- **Autopilot:** quando o jogador da vez está desconectado **e há alguém assistindo**, o server joga por ele com a IA `oficial` (uma ação a cada ~900ms, ~60ms no setup) até reconectar — a partida nunca congela por rage-quit.
+- **Autopilot:** quando o jogador da vez está desconectado **ou inativo por >2min** (conectado mas sem agir) **e há alguém assistindo**, o server joga por ele com a IA `oficial` (uma ação a cada ~900ms, ~60ms no setup) até reconectar/agir — a partida nunca congela por rage-quit nem por AFK.
 - Quando a partida termina, assentos offline saem do roster; `start` exige ≥2 conectados.
 - Sala mid-game sem ninguém conectado continua viva, mas a partida **pausa** — autopilot não corre sem plateia; retoma no primeiro reconnect. O sweep remove salas inertes por >2h.

@@ -361,6 +361,41 @@ describe("friend rooms", () => {
     await new Promise<void>((resolve) => wss.close(() => resolve()));
   }, 30_000);
 
+  it("autopilot takes over a connected but idle player", async () => {
+    const wss = startServer(0, { idleMs: 150, heartbeatMs: 40 });
+    const port = (wss.address() as { port: number }).port;
+    const url = `ws://127.0.0.1:${port}/ws`;
+
+    const host = new WebSocket(url);
+    await new Promise((r) => host.once("open", r));
+    host.send(JSON.stringify({ type: "create", nickname: "Ana" }));
+    const welcome = await onceMessage(host);
+    if (welcome.type !== "welcome") throw new Error("no welcome");
+
+    const guest = await joinRoom(url, welcome.roomCode, "Bia");
+    if (guest.welcome.type !== "welcome") throw new Error("no welcome");
+
+    host.send(JSON.stringify({ type: "start" }));
+    const started = (await waitFor(host, (m) => m.type === "state")) as Extract<
+      S2C,
+      { type: "state" }
+    >;
+    const firstPid = started.state.currentPlayerId;
+    const watcher = firstPid === welcome.playerId ? guest.ws : host;
+
+    // Nobody acts — the connected-but-idle current player gets autopiloted.
+    const advanced = (await waitFor(
+      watcher,
+      (m) => m.type === "state" && m.state.currentPlayerId !== firstPid,
+      15_000,
+    )) as Extract<S2C, { type: "state" }>;
+    expect(advanced.state.currentPlayerId).not.toBe(firstPid);
+
+    host.close();
+    guest.ws.close();
+    await new Promise<void>((resolve) => wss.close(() => resolve()));
+  }, 30_000);
+
   it("leave frees the seat, migrates host, and empties the room", async () => {
     const wss = startServer(0);
     const port = (wss.address() as { port: number }).port;

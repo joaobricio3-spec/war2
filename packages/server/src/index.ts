@@ -44,11 +44,17 @@ type Room = {
   seats: Seat[];
   state: GameState | null;
   lastTouched: number;
+  /** Timestamp da última ação aplicada — mede inatividade do jogador da vez. */
+  turnSince: number;
+  /** Limiar de inatividade para o autopilot (default IDLE_AUTOPILOT_MS). */
+  idleMs: number;
 };
 
 const rooms = new Map<string, Room>();
 const aiTimers = new Map<string, NodeJS.Timeout>();
 const STALE_ROOM_MS = 2 * 60 * 60 * 1000;
+/** Conectado mas inativo: autopilot assume após este tempo sem ação. */
+const IDLE_AUTOPILOT_MS = 120_000;
 
 const seatOnline = (seat: Seat | undefined): boolean =>
   !!seat?.ws && seat.ws.readyState === WebSocket.OPEN;
@@ -60,13 +66,20 @@ const onlineSeats = (room: Room) =>
  * Quando o jogador da vez está desconectado, o server joga por ele (IA oficial)
  * até reconectar — um rage-quit não pode congelar a partida dos demais.
  */
+/** A vez pertence a um assento que precisa de autopilot: offline ou AFK. */
+function needsAutopilot(room: Room, seat: Seat | undefined): boolean {
+  if (!seat) return false;
+  if (!seatOnline(seat)) return true;
+  return Date.now() - room.turnSince >= room.idleMs;
+}
+
 function scheduleAutopilot(room: Room) {
   if (!room.state || room.state.phase === "over") return;
   // Sem ninguém assistindo, a partida pausa — quem voltar encontra o jogo
   // onde parou, não uma partida que a IA terminou sozinha.
   if (onlineSeats(room).length === 0) return;
   const seat = room.seats.find((s) => s.playerId === room.state!.currentPlayerId);
-  if (!seat || seatOnline(seat)) return;
+  if (!needsAutopilot(room, seat)) return;
   if (aiTimers.has(room.code)) return;
   // Setup coloca 1 tropa por action — passo curto para não arrastar o lobby.
   const delay = room.state.phase === "setup_place" ? 60 : 900;
@@ -88,7 +101,7 @@ function autopilotStep(room: Room) {
   }
   if (onlineSeats(room).length === 0) return; // ninguém assistindo — pausa
   const seat = room.seats.find((x) => x.playerId === s.currentPlayerId);
-  if (!seat || seatOnline(seat)) return; // reconectou — humano reassume
+  if (!needsAutopilot(room, seat)) return; // reconectou/agiu — humano reassume
   const rng = createSeededRng(
     (Date.now() ^ Number.parseInt(randomBytes(4).toString("hex"), 16)) >>> 0,
   );
@@ -110,6 +123,10 @@ function autopilotStep(room: Room) {
   if (!next) return;
   room.state = next;
   room.lastTouched = Date.now();
+  // Só o relógio do jogador novo reinicia — ação do autopilot não conta como
+  // atividade humana, senão um AFK ganharia 1 passo por intervalo em vez de
+  // autopilot contínuo.
+  if (next.currentPlayerId !== s.currentPlayerId) room.turnSince = Date.now();
   if (room.state.phase === "over") room.seats = onlineSeats(room);
   broadcastState(room);
   scheduleAutopilot(room);
@@ -258,9 +275,10 @@ function startGame(room: Room) {
       color: s.color,
     })),
   });
+  room.turnSince = Date.now();
 }
 
-function handle(client: Client, raw: string) {
+function handle(client: Client, raw: string, idleMs: number) {
   let msg: C2S;
   try {
     msg = JSON.parse(raw) as C2S;
@@ -296,6 +314,8 @@ function handle(client: Client, raw: string) {
       seats: [seat],
       state: null,
       lastTouched: Date.now(),
+      turnSince: Date.now(),
+      idleMs,
     };
     rooms.set(code, room);
     client.roomCode = code;
@@ -438,6 +458,7 @@ function handle(client: Client, raw: string) {
       return;
     }
     room.state = result.state;
+    room.turnSince = Date.now(); // ação humana = atividade — zera o AFK
     if (room.state.phase === "over") room.seats = onlineSeats(room);
     broadcastState(room);
     scheduleAutopilot(room);
@@ -449,12 +470,19 @@ function handle(client: Client, raw: string) {
 
 export function startServer(
   port: number,
-  opts?: { rateMaxMsgs?: number; rateWindowMs?: number },
+  opts?: {
+    rateMaxMsgs?: number;
+    rateWindowMs?: number;
+    idleMs?: number;
+    heartbeatMs?: number;
+  },
 ) {
   // Testes podem afrouxar o limite para não pagar o pacing real; produção
-  // mantém os defaults RATE_*.
+  // mantém os defaults RATE_* / IDLE_* / HEARTBEAT_*.
   const rateMax = opts?.rateMaxMsgs ?? RATE_MAX_MSGS;
   const rateWindow = opts?.rateWindowMs ?? RATE_WINDOW_MS;
+  const idleMs = opts?.idleMs ?? IDLE_AUTOPILOT_MS;
+  const heartbeatMs = opts?.heartbeatMs ?? HEARTBEAT_MS;
   const wss = new WebSocketServer({ port, path: "/ws", maxPayload: MAX_PAYLOAD_BYTES });
   wss.on("error", () => {
     /* porta em uso / erros de transporte — não derruba o processo */
@@ -486,7 +514,7 @@ export function startServer(
         return;
       }
       try {
-        handle(client, String(data));
+        handle(client, String(data), idleMs);
       } catch {
         send(ws, { type: "error", message: "erro interno" });
       }
@@ -522,14 +550,18 @@ export function startServer(
     }
     const now = Date.now();
     for (const room of rooms.values()) {
-      if (now - room.lastTouched <= STALE_ROOM_MS) continue;
-      const t = aiTimers.get(room.code);
-      if (t) clearTimeout(t);
-      aiTimers.delete(room.code);
-      for (const s of room.seats) s.ws?.close();
-      rooms.delete(room.code);
+      if (now - room.lastTouched > STALE_ROOM_MS) {
+        const t = aiTimers.get(room.code);
+        if (t) clearTimeout(t);
+        aiTimers.delete(room.code);
+        for (const s of room.seats) s.ws?.close();
+        rooms.delete(room.code);
+        continue;
+      }
+      // Varredura periódica: pega jogador que ficou AFK depois da última ação.
+      scheduleAutopilot(room);
     }
-  }, HEARTBEAT_MS);
+  }, heartbeatMs);
   wss.on("close", () => clearInterval(heartbeat));
   return wss;
 }
