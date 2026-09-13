@@ -64,4 +64,5 @@ Complemento de `classic.md`. Cada item tem (ou deve ter) teste em `@war2/engine`
 - Assento desconectado mid-game é preservado para reconnect por token; no lobby ele é removido.
 - **Autopilot:** quando o jogador da vez está desconectado **ou inativo por >2min** (conectado mas sem agir) **e há alguém assistindo**, o server joga por ele com a IA `oficial` (uma ação a cada ~900ms, ~60ms no setup) até reconectar/agir — a partida nunca congela por rage-quit nem por AFK.
 - Quando a partida termina, assentos offline saem do roster; `start` exige ≥2 conectados.
+- **Rematch:** `start` com a partida em `over` cria um jogo novo na mesma sala com os assentos conectados — não é preciso recriar a sala nem compartilhar código de novo.
 - Sala mid-game sem ninguém conectado continua viva, mas a partida **pausa** — autopilot não corre sem plateia; retoma no primeiro reconnect. O sweep remove salas inertes por >2h.

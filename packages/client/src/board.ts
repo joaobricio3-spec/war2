@@ -227,6 +227,16 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     applyWorldPos();
   };
 
+  // Teclado: setas arrastam a câmera, +/− dão zoom no centro da tela.
+  const panBy = (dx: number, dy: number) => {
+    baseX += dx;
+    baseY += dy;
+    clampPan();
+    applyWorldPos();
+  };
+  const zoomBy = (factor: number) =>
+    zoomAt(app.screen.width / 2, app.screen.height / 2, world.scale.x * factor);
+
   // Multi-pointer tracking: 1 dedo = pan/tap, 2 dedos = pinch.
   const ptrs = new Map<number, { x: number; y: number }>();
   let pinchDist = 0;
@@ -359,5 +369,5 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     trauma = Math.min(1, trauma + amount);
   }
 
-  return { render, fps, shake, resetView: fitWorld, app };
+  return { render, fps, shake, resetView: fitWorld, panBy, zoomBy, app };
 }

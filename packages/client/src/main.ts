@@ -1090,6 +1090,21 @@ function updateDice() {
       board.resetView();
       return;
     }
+    // Câmera por teclado — não dentro de inputs nem atrás de diálogos.
+    const typing =
+      e.target instanceof HTMLInputElement ||
+      e.target instanceof HTMLSelectElement ||
+      e.target instanceof HTMLTextAreaElement;
+    if (!typing && ui.overlay.hidden && ui.help.hidden && ui.gameover.hidden) {
+      const PAN = 90;
+      if (e.key.startsWith("Arrow")) e.preventDefault();
+      if (e.key === "ArrowLeft") return board.panBy(PAN, 0);
+      if (e.key === "ArrowRight") return board.panBy(-PAN, 0);
+      if (e.key === "ArrowUp") return board.panBy(0, PAN);
+      if (e.key === "ArrowDown") return board.panBy(0, -PAN);
+      if (e.key === "+" || e.key === "=") return board.zoomBy(1.15);
+      if (e.key === "-" || e.key === "_") return board.zoomBy(1 / 1.15);
+    }
     if (e.key !== " " && e.code !== "Space") return;
     if (!state || ui.overlay.hidden === false) return;
     if (mode === "campaign" && (aiThinking || state.currentPlayerId !== humanId)) return;
