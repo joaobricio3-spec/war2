@@ -397,6 +397,8 @@ function updateDice() {
     return out;
   }
 
+  const myTurn0 = (s: GameState, me: PlayerId) => s.currentPlayerId === me;
+
   function paint() {
     const s = state;
     if (!s) return;
@@ -412,10 +414,12 @@ function updateDice() {
     ui.phase.textContent = PHASE_PT[s.phase] ?? s.phase;
     ui.turn.textContent = `${cur?.nickname ?? s.currentPlayerId} (${COLOR_PT[cur?.color ?? ""] ?? cur?.color ?? ""})`;
     ui.objective.textContent = describeObjective(s, me);
+    const pool = pendingPlaceTotal(s.armiesToPlace);
+    const poolOwner = myTurn0(s, me) ? "" : ` (de ${cur?.nickname ?? s.currentPlayerId})`;
     ui.pending.textContent =
       s.phase === "setup_place"
-        ? `setup: restam ${p?.setupRemaining ?? 0} tropas`
-        : `pendentes: ${pendingPlaceTotal(s.armiesToPlace)} | troca obrigatória: ${s.mustTrade ? "sim" : "não"}`;
+        ? `setup: restam ${p?.setupRemaining ?? 0} tropas${poolOwner}`
+        : `pendentes${poolOwner}: ${pool} | troca obrigatória: ${s.mustTrade ? "sim" : "não"}`;
 
     ui.status.hidden = false;
     const myTurn = s.currentPlayerId === me;
@@ -475,8 +479,16 @@ function updateDice() {
     if (s.phase === "setup_place") ui.end.textContent = "Posicione tropas";
     else if (s.phase === "reinforce") ui.end.textContent = "Encerrar reforço";
     else if (s.phase === "attack") ui.end.textContent = "Ir ao deslocamento";
-    else if (s.phase === "fortify") ui.end.textContent = "Passar o turno";
+    else if (s.phase === "fortify")
+      ui.end.textContent = s.fortifiedThisTurn ? "Passar o turno" : "Deslocar ou passar";
     else ui.end.textContent = "Encerrar fase";
+    if (s.phase === "fortify" && myTurn && !s.mustTrade && !s.fortifiedThisTurn) {
+      ui.status.textContent = "Deslocamento — 1 transferência (opcional)";
+      ui.status.dataset.tone = "you";
+    } else if (s.phase === "fortify" && myTurn && !s.mustTrade && s.fortifiedThisTurn) {
+      ui.status.textContent = "Deslocamento usado — passe o turno";
+      ui.status.dataset.tone = "you";
+    }
 
     paintOccupy(s, me);
     ui.logEmpty.hidden = ui.log.childElementCount > 0;
