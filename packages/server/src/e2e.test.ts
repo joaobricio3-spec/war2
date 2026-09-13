@@ -259,6 +259,40 @@ describe("e2e gauntlet", () => {
       expect(final.winnerId).not.toBeNull();
       expect(bots.map((b) => b.overState?.phase)).toEqual(["over", "over"]);
 
+      // Rematch: `start` com a partida em `over` cria jogo novo na mesma
+      // sala, com os mesmos assentos — ninguém recria código nem reconecta.
+      // Qualquer estado não-`over` pós-start é o jogo novo (over é terminal);
+      // com pacing livre a partida 2 pode correr inteira num poll — por isso
+      // não amarramos a checagem ao setup_place/turnIndex 0.
+      const seenFresh = { host: false, guest: false };
+      host.ws.on("message", (data) => {
+        const m = JSON.parse(String(data)) as S2C;
+        if (m.type === "state" && m.state.phase !== "over") seenFresh.host = true;
+      });
+      guest.ws.on("message", (data) => {
+        const m = JSON.parse(String(data)) as S2C;
+        if (m.type === "state" && m.state.phase !== "over") seenFresh.guest = true;
+      });
+      await host.send({ type: "start" });
+      await new Promise<void>((resolve, reject) => {
+        const deadline = Date.now() + STALL_MS;
+        const iv = setInterval(() => {
+          if (seenFresh.host && seenFresh.guest) {
+            clearInterval(iv);
+            resolve();
+          } else if (Date.now() > deadline) {
+            clearInterval(iv);
+            reject(
+              new Error(
+                `rematch did not start a fresh game\n  ${diagnostics()}`,
+              ),
+            );
+          }
+        }, 100);
+      });
+      expect(host.errors).toEqual([]);
+      expect(guest.errors).toEqual([]);
+
       host.ws.close();
       guest.ws.close();
       await new Promise<void>((resolve) => wss.close(() => resolve()));
