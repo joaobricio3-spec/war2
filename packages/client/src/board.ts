@@ -212,17 +212,76 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   let lx = 0;
   let ly = 0;
   let dragDist = 0;
+
+  /** Zoom ancorado num ponto da tela (cursor ou meio do pinch). */
+  const zoomAt = (px: number, py: number, target: number) => {
+    const s0 = world.scale.x;
+    const s1 = Math.min(3.2, Math.max(fitScale, target));
+    if (s1 === s0) return;
+    // The world point under `px,py` must stay under it after scaling.
+    const k = s1 / s0;
+    baseX = px - (px - baseX) * k;
+    baseY = py - (py - baseY) * k;
+    world.scale.set(s1);
+    clampPan();
+    applyWorldPos();
+  };
+
+  // Multi-pointer tracking: 1 dedo = pan/tap, 2 dedos = pinch.
+  const ptrs = new Map<number, { x: number; y: number }>();
+  let pinchDist = 0;
+  let pinchMid = { x: 0, y: 0 };
+
   app.canvas.addEventListener("pointerdown", (e) => {
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()];
+      pinchDist = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+      pinchMid = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+      dragging = false;
+      panned = true; // gesto não é tap
+      return;
+    }
     dragging = true;
     panned = false;
     dragDist = 0;
     lx = e.clientX;
     ly = e.clientY;
   });
-  window.addEventListener("pointerup", () => {
-    dragging = false;
-  });
+  const endPtr = (e: PointerEvent) => {
+    ptrs.delete(e.pointerId);
+    if (ptrs.size === 1) {
+      // Um dedo sobra do pinch: continua como pan a partir de onde está.
+      const rest = [...ptrs.values()][0]!;
+      lx = rest.x;
+      ly = rest.y;
+      dragDist = 999; // mantém panned — não vira tap
+      dragging = true;
+    }
+    if (ptrs.size === 0) dragging = false;
+  };
+  window.addEventListener("pointerup", endPtr);
+  window.addEventListener("pointercancel", endPtr);
   window.addEventListener("pointermove", (e) => {
+    const p = ptrs.get(e.pointerId);
+    if (p) {
+      p.x = e.clientX;
+      p.y = e.clientY;
+    }
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()];
+      const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+      const mid = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+      const rect = app.canvas.getBoundingClientRect();
+      baseX += mid.x - pinchMid.x;
+      baseY += mid.y - pinchMid.y;
+      if (pinchDist > 0) {
+        zoomAt(mid.x - rect.left, mid.y - rect.top, world.scale.x * (d / pinchDist));
+      }
+      pinchDist = d;
+      pinchMid = mid;
+      return;
+    }
     if (!dragging) return;
     const dx = e.clientX - lx;
     const dy = e.clientY - ly;
@@ -242,20 +301,12 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     "wheel",
     (e) => {
       e.preventDefault();
-      const s0 = world.scale.x;
-      const s1 = Math.min(3.2, Math.max(fitScale, s0 * (e.deltaY > 0 ? 0.92 : 1.08)));
-      if (s1 === s0) return;
-      // Anchor the zoom at the cursor: the world point under the pointer
-      // must stay under the pointer after scaling.
       const rect = app.canvas.getBoundingClientRect();
-      const px = e.clientX - rect.left;
-      const py = e.clientY - rect.top;
-      const k = s1 / s0;
-      baseX = px - (px - baseX) * k;
-      baseY = py - (py - baseY) * k;
-      world.scale.set(s1);
-      clampPan();
-      applyWorldPos();
+      zoomAt(
+        e.clientX - rect.left,
+        e.clientY - rect.top,
+        world.scale.x * (e.deltaY > 0 ? 0.92 : 1.08),
+      );
     },
     { passive: false },
   );

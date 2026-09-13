@@ -197,6 +197,9 @@ button.primary {
   display: block;
   width: 100%;
   height: 100%;
+  /* Pinch/pan de toque são nossos — sem isso o browser rouba o gesto
+     pra zoom de página. */
+  touch-action: none;
 }
 
 #overlay {
