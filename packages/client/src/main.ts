@@ -498,13 +498,18 @@ function updateDice() {
 
   let lastPhase: GameState["phase"] | null = null;
   let lastCurrent: PlayerId | null = null;
+  let objectiveRevealedFor: PlayerId | null = null;
 
   function paint() {
     const s = state;
     if (!s) return;
     // Seleção não atravessa turno/fase — um clique a mais na vez seguinte não
-    // deve despejar o pool num território escolhido sem querer antes.
-    if (s.phase !== lastPhase || s.currentPlayerId !== lastCurrent) selected = null;
+    // deve despejar o pool num território escolhido sem querer antes. A
+    // revelação do objetivo no hotseat também expira com a vez.
+    if (s.phase !== lastPhase || s.currentPlayerId !== lastCurrent) {
+      selected = null;
+      objectiveRevealedFor = null;
+    }
     lastPhase = s.phase;
     lastCurrent = s.currentPlayerId;
     const me =
@@ -518,7 +523,11 @@ function updateDice() {
     const cur = s.players.find((pl) => pl.id === s.currentPlayerId);
     ui.phase.textContent = PHASE_PT[s.phase] ?? s.phase;
     ui.turn.textContent = `${cur?.nickname ?? s.currentPlayerId} (${COLOR_PT[cur?.color ?? ""] ?? cur?.color ?? ""})`;
-    ui.objective.textContent = describeObjective(s, me);
+    // Hotseat divide a tela: o objetivo fica mascarado até o jogador da vez
+    // tocar — os adversários no mesmo PC não leem de graça.
+    const objMasked = mode === "hotseat" && objectiveRevealedFor !== me;
+    ui.objective.textContent = objMasked ? "toque para revelar" : describeObjective(s, me);
+    ui.objective.dataset.masked = objMasked ? "1" : "";
     const pool = pendingPlaceTotal(s.armiesToPlace);
     const poolOwner = myTurn0(s, me) ? "" : ` (de ${cur?.nickname ?? s.currentPlayerId})`;
     ui.pending.textContent =
@@ -1053,6 +1062,11 @@ function updateDice() {
     ui.overlay.hidden = true;
     paint();
     if (mode === "campaign") maybeRunAI();
+  });
+  ui.objective.addEventListener("click", () => {
+    if (mode !== "hotseat" || !state) return;
+    objectiveRevealedFor = state.currentPlayerId;
+    paint();
   });
   document.querySelector("#title")?.addEventListener("click", () => goToTitle());
   document.querySelector("#abandon")?.addEventListener("click", () => abandonCampaign());

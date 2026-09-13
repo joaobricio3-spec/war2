@@ -102,6 +102,13 @@ dd {
   margin: 0;
 }
 
+#objective[data-masked="1"] {
+  cursor: pointer;
+  color: var(--brass);
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+
 .cards {
   display: flex;
   flex-wrap: wrap;
