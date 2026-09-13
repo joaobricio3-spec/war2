@@ -50,7 +50,8 @@ Ordem: **reforço → ataque → deslocamento → carta**.
   sempre fica ≥1 na origem.
 - Eliminar o último território de alguém: o eliminado sai e o atacante **herda as cartas**.
   Com 6+ cartas, troca na hora e as tropas da troca entram no tabuleiro antes de seguir.
-- Conquistou ≥1 território no turno → compra **1** carta ao encerrar os ataques.
+- Conquistou ≥1 território no turno → compra **1** carta ao passar o turno (depois
+  do deslocamento, se houver).
 
 ### Deslocamento
 
@@ -67,7 +68,8 @@ Ordem: **reforço → ataque → deslocamento → carta**.
 
 ## Missões (modo missão)
 
-Sorteio sem repetir; ninguém recebe "destruir a própria cor".
+Sorteio sem repetir dentre os objetivos válidos para as cores em jogo. "Destruir a
+própria cor" entra no sorteio e vale como **24 territórios** (`effectiveObjective`).
 
 - 24 territórios.
 - 18 territórios com **pelo menos 2 tropas em cada** um desses 18 (extras com 1 não contam).
@@ -82,9 +84,11 @@ turno — nunca no ataque que deixa o território a 0. **Último sobrevivente ta
 ## IA
 
 - Não age fora do próprio turno; não aceita input humano enquanto está pensando.
-- **Recruta**: só ataca com vantagem clara, para cedo.
-- **Oficial**: equilibrada; troca com 4+ se houver set.
-- **Marechal**: agressiva; persegue a missão, pressiona frentes.
+- **Recruta**: só ataca com vantagem clara (≥2 e origem ≥3), para cedo.
+- **Oficial**: equilibrada; troca com 4+ se houver set; consolida no deslocamento.
+- **Marechal**: agressiva (vantagem ≥1, origem ≥2); troca com 3+; concentra força
+  na fronteira que já lidera. A IA não lê objetivos — personalidade é só nos
+  limiares de ataque/troca.
 - Nunca trava a UI: ações intercaladas com espera curta (quase nula com `prefers-reduced-motion`).
 
 ## Apresentação
