@@ -291,6 +291,76 @@ describe("friend rooms", () => {
     await new Promise<void>((resolve) => wss.close(() => resolve()));
   }, 30_000);
 
+  it("pauses while everyone is gone and resumes autopilot on reconnect", async () => {
+    const wss = startServer(0);
+    const port = (wss.address() as { port: number }).port;
+    const url = `ws://127.0.0.1:${port}/ws`;
+
+    const host = new WebSocket(url);
+    await new Promise((r) => host.once("open", r));
+    host.send(JSON.stringify({ type: "create", nickname: "Ana" }));
+    const welcome = await onceMessage(host);
+    if (welcome.type !== "welcome") throw new Error("no welcome");
+
+    const guest = await joinRoom(url, welcome.roomCode, "Bia");
+    if (guest.welcome.type !== "welcome") throw new Error("no welcome");
+
+    host.send(JSON.stringify({ type: "start" }));
+    await waitFor(host, (m) => m.type === "state");
+
+    // Everyone drops — the match must pause, not self-play to "over".
+    guest.ws.close();
+    host.close();
+    await new Promise((r) => setTimeout(r, 1_200));
+
+    const back = new WebSocket(url);
+    await new Promise((r) => back.once("open", r));
+    back.send(
+      JSON.stringify({
+        type: "reconnect",
+        roomCode: welcome.roomCode,
+        token: welcome.token,
+      }),
+    );
+    const re = await onceMessage(back);
+    expect(re.type).toBe("welcome");
+    if (re.type !== "welcome" || !re.state) throw new Error("no state");
+    // While nobody watched, almost nothing was placed — if autopilot had
+    // self-played for 1.2s (~20 steps a 60ms), total armies would be ~60+.
+    const totalArmies = Object.values(re.state.territories).reduce(
+      (sum, t) => sum + t.armies,
+      0,
+    );
+    expect(re.state.phase).toBe("setup_place");
+    expect(totalArmies).toBeLessThan(50);
+
+    // With a watcher back, the match resumes: if the reconnected seat is on
+    // turn it acts itself; otherwise the offline seat gets autopiloted.
+    const wasCurrent = re.state.currentPlayerId;
+    if (wasCurrent === re.playerId) {
+      const mine = Object.keys(re.state.territories).find(
+        (id) =>
+          re.state!.territories[id as keyof typeof re.state.territories]!
+            .ownerId === re.playerId,
+      );
+      back.send(
+        JSON.stringify({
+          type: "action",
+          action: { type: "place", territoryId: mine, count: 1 },
+        }),
+      );
+    }
+    const resumed = (await waitFor(
+      back,
+      (m) => m.type === "state" && m.state.currentPlayerId !== wasCurrent,
+      15_000,
+    )) as Extract<S2C, { type: "state" }>;
+    expect(resumed.state.currentPlayerId).not.toBe(wasCurrent);
+
+    back.close();
+    await new Promise<void>((resolve) => wss.close(() => resolve()));
+  }, 30_000);
+
   it("leave frees the seat, migrates host, and empties the room", async () => {
     const wss = startServer(0);
     const port = (wss.address() as { port: number }).port;

@@ -62,6 +62,9 @@ const onlineSeats = (room: Room) =>
  */
 function scheduleAutopilot(room: Room) {
   if (!room.state || room.state.phase === "over") return;
+  // Sem ninguém assistindo, a partida pausa — quem voltar encontra o jogo
+  // onde parou, não uma partida que a IA terminou sozinha.
+  if (onlineSeats(room).length === 0) return;
   const seat = room.seats.find((s) => s.playerId === room.state!.currentPlayerId);
   if (!seat || seatOnline(seat)) return;
   if (aiTimers.has(room.code)) return;
@@ -83,6 +86,7 @@ function autopilotStep(room: Room) {
     gcOrBroadcast(room);
     return;
   }
+  if (onlineSeats(room).length === 0) return; // ninguém assistindo — pausa
   const seat = room.seats.find((x) => x.playerId === s.currentPlayerId);
   if (!seat || seatOnline(seat)) return; // reconectou — humano reassume
   const rng = createSeededRng(
@@ -364,6 +368,9 @@ function handle(client: Client, raw: string) {
     if (prev && prev !== client.ws) prev.close();
     welcome(room, seat, seat.playerId === room.hostId);
     broadcastRoom(room);
+    // Alguém voltou a assistir — retoma o autopilot se a vez ainda é de um
+    // assento offline.
+    scheduleAutopilot(room);
     return;
   }
 
