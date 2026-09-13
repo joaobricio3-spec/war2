@@ -419,6 +419,7 @@ function showChooser(opts: ChooserOpts) {
     ui.chooserN.hidden = false;
     ui.chooserOk.hidden = false;
   }
+  (opts.max <= 4 ? ui.chooserBtns.querySelector("button")! : ui.chooserN).focus();
 }
 
 function hideChooser() {
@@ -891,6 +892,7 @@ function updateDice() {
       : `Venceu ${winner?.nickname ?? "?"}.`;
     ui.overlay.hidden = true;
     ui.gameover.hidden = false;
+    document.querySelector<HTMLButtonElement>("#gameover-title-btn")?.focus();
     paint();
   }
 
@@ -991,6 +993,11 @@ function updateDice() {
     ui.resume.hidden = !state || state.phase === "over";
     ui.overlay.hidden = false;
     updateLobby();
+    // Traz o foco pro diálogo — teclado não fica preso no tabuleiro ao fundo.
+    (ui.resume.hidden
+      ? document.querySelector<HTMLButtonElement>("#campaign")
+      : ui.resume
+    )?.focus();
   }
 
   function abandonCampaign() {
@@ -1052,6 +1059,7 @@ function updateDice() {
   document.querySelector("#gameover-title-btn")?.addEventListener("click", () => goToTitle());
   document.querySelector("#help-btn")?.addEventListener("click", () => {
     ui.help.hidden = false;
+    document.querySelector<HTMLButtonElement>("#help-close")?.focus();
   });
   document.querySelector("#help-close")?.addEventListener("click", () => {
     ui.help.hidden = true;
