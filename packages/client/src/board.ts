@@ -5,7 +5,7 @@ import {
   type PlayerId,
   type TerritoryId,
 } from "@war2/engine";
-import { LAYOUT, LAYOUT_BY_ID, SEA_LANES, WORLD, pointInPoly } from "./layout.ts";
+import { LAYOUT, LAYOUT_BY_ID, SEA_LANES, WORLD } from "./layout.ts";
 
 const CHIP: Record<string, number> = {
   red: 0xc45c4a,
@@ -72,6 +72,18 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     }),
   );
 
+  // Index map: pixel → território (mesma regra Voronoi∩terra que gera as
+  // máscaras). Clique e região visível são a mesma coisa, sempre.
+  const idxImg = new Image();
+  idxImg.src = "/assets/regions-index.png";
+  await idxImg.decode();
+  const idxCanvas = document.createElement("canvas");
+  idxCanvas.width = WORLD.width;
+  idxCanvas.height = WORLD.height;
+  const idxCtx = idxCanvas.getContext("2d")!;
+  idxCtx.drawImage(idxImg, 0, 0);
+  const idxData = idxCtx.getImageData(0, 0, WORLD.width, WORLD.height).data;
+
   const world = new Container();
   app.stage.addChild(world);
 
@@ -80,9 +92,20 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   relief.height = WORLD.height;
   relief.alpha = 1;
   relief.eventMode = "static";
-  relief.on("pointertap", () => {
+  relief.cursor = "pointer";
+  relief.on("pointertap", (e) => {
     if (panned) return;
-    hooks.onEmpty?.();
+    // Clique = pixel do index map: a região que você vê é a que recebe.
+    const p = world.toLocal(e.global);
+    const x = Math.floor(p.x);
+    const y = Math.floor(p.y);
+    const n =
+      x >= 0 && x < WORLD.width && y >= 0 && y < WORLD.height
+        ? (idxData[(y * WORLD.width + x) * 4] ?? 0)
+        : 0;
+    const t = n > 0 ? LAYOUT[n - 1]?.id : undefined;
+    if (t) hooks.onTerritory(t);
+    else hooks.onEmpty?.();
   });
   world.addChild(relief);
 
@@ -152,17 +175,7 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     const fill = new Sprite(tex);
     fill.width = WORLD.width;
     fill.height = WORLD.height;
-    fill.eventMode = "static";
-    fill.cursor = "pointer";
-    fill.hitArea = {
-      contains(x: number, y: number) {
-        return pointInPoly(x, y, l.poly);
-      },
-    };
-    fill.on("pointertap", () => {
-      if (panned) return;
-      hooks.onTerritory(l.id);
-    });
+    fill.eventMode = "none";
     fillLayer.addChild(halo, fill);
 
     const name = new Text({
@@ -377,7 +390,7 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
 
       // Fill sprite: região costa-acurada tingida continente+dono.
       cell.fill.tint = fill;
-      cell.fill.alpha = on ? 0.88 : target ? 0.8 : 0.66;
+      cell.fill.alpha = on ? 0.92 : target ? 0.86 : 0.78;
 
       // Halo: rim glow por expansão da mesma máscara em torno da âncora.
       if (on || target) {
