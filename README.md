@@ -19,10 +19,14 @@ pnpm dev
 
 O client usa PixiJS; o workspace tem `.npmrc` com `shamefully-hoist=true` para as dependências internas do Pixi resolverem no Vite.
 
-- Cliente: [http://localhost:5173](http://localhost:5173) — hotseat local (2–6 no mesmo PC) ou entrar numa sala.
-- Servidor de salas: `ws://localhost:8787`.
+- Cliente: [http://localhost:5173](http://localhost:5173) — campanha vs IA, hotseat local (2–6 no mesmo PC) ou sala entre amigos.
+- Servidor de salas: `ws://localhost:8787/ws`.
 
-Hotseat não precisa do servidor. Salas entre amigos: um sobe `pnpm --filter @war2/server dev`, os outros apontam o cliente para esse host.
+**Modos de jogo**
+
+- **Campanha**: você + 1–5 IAs (recruta / oficial / marechal), save automático no navegador com botão "Continuar".
+- **Hotseat**: 2–6 jogadores no mesmo teclado/mouse, sem servidor.
+- **Salas**: um sobe `pnpm --filter @war2/server dev`, os outros apontam o cliente para esse host. Código de 6 caracteres, reconnect por token, e **autopilot**: se alguém cai no meio da partida, a IA joga por ele até voltar — a sala nunca congela.
 
 ## Pacotes
 
@@ -33,17 +37,18 @@ Hotseat não precisa do servidor. Salas entre amigos: um sobe `pnpm --filter @wa
 | `@war2/client` | PixiJS 8, rAF sem teto de FPS, UI HTML. |
 | `@war2/server` | Salas com código de 6 caracteres, autoridade no reducer. |
 
-Regras **não** vivem no React/Pixi. O client só despacha `{ type, payload }` e interpola o snapshot. O server importa o mesmo `reduce`.
+Regras **não** vivem no Pixi. O client só despacha `{ type, payload }` e interpola o snapshot. O server importa o mesmo `reduce`.
 
-## Repo público
-
-Este workspace ainda não tem remote. Com [GitHub CLI](https://cli.github.com/) autenticado:
+## Testes e gate
 
 ```bash
-git add .
-git commit -m "feat: motor clássico, cliente Pixi e salas entre amigos"
-gh repo create war2 --public --source=. --remote=origin --push
+pnpm test          # engine (regras+IA+sim), client (layout), server (salas+E2E)
+pnpm typecheck
+pnpm --filter @war2/client build
+node scripts/war-gate.mjs   # typecheck + checks estáticos (fps cap, RNG, camera loop)
 ```
+
+O gauntlet E2E (`packages/server/src/e2e.test.ts`) joga uma partida real completa entre dois sockets até `phase: "over"`.
 
 ## Contribuir
 
