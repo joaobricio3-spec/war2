@@ -659,8 +659,10 @@ function updateDice() {
       const offline =
         mode === "net" &&
         netPlayers.some((np) => np.playerId === p.id && !np.connected);
+      const aiDiff = mode === "campaign" ? aiPlayers.get(p.id) : undefined;
       const who =
         (p.id === me && mode !== "hotseat" ? `${p.nickname} (você)` : p.nickname) +
+        (aiDiff ? ` (${aiDiff})` : "") +
         (offline ? " (offline)" : "");
       li.innerHTML = `<i></i><span></span><em>${territories}t · ${p.cards.length}c</em>`;
       li.querySelector("span")!.textContent = who;
@@ -935,7 +937,7 @@ function updateDice() {
     ui.dice.innerHTML = "";
   }
 
-  function startCampaign(aiCount: number, diff: Difficulty) {
+  function startCampaign(aiCount: number, diff: Difficulty | "variada") {
     stopAI();
     const total = Math.min(6, Math.max(2, aiCount + 1));
     const players: { id: PlayerId; nickname: string; color: (typeof COLORS)[number] }[] = [
@@ -947,7 +949,15 @@ function updateDice() {
     rng = createSeededRng(Date.now() % 1_000_000);
     mode = "campaign";
     humanId = "p1";
-    aiPlayers = new Map(players.slice(1).map((p) => [p.id, diff] as [PlayerId, Difficulty]));
+    const MIX: Difficulty[] = ["recruta", "oficial", "marechal"];
+    aiPlayers = new Map(
+      players
+        .slice(1)
+        .map(
+          (p, i) =>
+            [p.id, diff === "variada" ? MIX[i % MIX.length]! : diff] as [PlayerId, Difficulty],
+        ),
+    );
     leaveRoom();
     sessionStorage.removeItem("war2");
 
@@ -1074,7 +1084,9 @@ function updateDice() {
 
   document.querySelector("#campaign")?.addEventListener("click", () => {
     const n = Number((document.querySelector("#aicount") as HTMLSelectElement).value);
-    const diff = (document.querySelector("#aidiff") as HTMLSelectElement).value as Difficulty;
+    const diff = (document.querySelector("#aidiff") as HTMLSelectElement).value as
+      | Difficulty
+      | "variada";
     startCampaign(n, diff);
   });
   ui.continue.addEventListener("click", () => continueCampaign());
