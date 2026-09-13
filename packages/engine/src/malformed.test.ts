@@ -144,6 +144,91 @@ describe("malformed actions", () => {
     );
     expect(bad.ok).toBe(false);
   });
+
+  it("rejects occupy outside the pending window", () => {
+    const st = toAttack(game());
+    const me = st.currentPlayerId;
+    st.pendingOccupy = { from: "brasil", to: "argentina", minArmies: 2, maxArmies: 3 };
+    const below = reduce(
+      st,
+      { type: "occupy", playerId: me, armies: 1 } as Action,
+      rng,
+    );
+    expect(below.ok).toBe(false);
+    const above = reduce(
+      st,
+      { type: "occupy", playerId: me, armies: 99 } as Action,
+      rng,
+    );
+    expect(above.ok).toBe(false);
+  });
+
+  it("rejects placing more armies than the pending pool", () => {
+    const st = finishSetup(game());
+    const me = st.currentPlayerId;
+    const mine = TERRITORY_IDS.find((id) => st.territories[id].ownerId === me)!;
+    const pool = pendingPlaceTotal(st.armiesToPlace);
+    const bad = reduce(
+      st,
+      { type: "place", playerId: me, territoryId: mine, count: pool + 1 } as Action,
+      rng,
+    );
+    expect(bad.ok).toBe(false);
+  });
+
+  it("rejects fortify that would empty the origin or skip the chain", () => {
+    const st = toAttack(game());
+    st.phase = "fortify";
+    const me = st.currentPlayerId;
+    const [from, to] = TERRITORY_IDS.filter((id) => st.territories[id].ownerId === me);
+    const origin = st.territories[from].armies;
+    const empty = reduce(
+      st,
+      { type: "fortify", playerId: me, from: from!, to: to!, armies: origin } as Action,
+      rng,
+    );
+    expect(empty.ok).toBe(false);
+  });
+
+  it("rejects out-of-range dice counts and non-adjacent attacks", () => {
+    const st = toAttack(game());
+    const me = st.currentPlayerId;
+    const [from, to] = (() => {
+      for (const t of TERRITORIES) {
+        if (st.territories[t.id].ownerId === me && st.territories[t.id].armies > 3) {
+          const nb = t.neighbors.find((n) => st.territories[n].ownerId !== me);
+          if (nb) return [t.id, nb];
+        }
+      }
+      throw new Error("no attack edge");
+    })();
+    for (const armies of [0, 4]) {
+      const bad = reduce(
+        st,
+        { type: "attack", playerId: me, from, to, armies } as unknown as Action,
+        rng,
+      );
+      expect(bad.ok).toBe(false);
+    }
+    const far = TERRITORY_IDS.find(
+      (id) =>
+        st.territories[id].ownerId !== me &&
+        !TERRITORIES.find((t) => t.id === from)!.neighbors.includes(id),
+    )!;
+    const nonAdjacent = reduce(
+      st,
+      { type: "attack", playerId: me, from, to: far, armies: 1 } as Action,
+      rng,
+    );
+    expect(nonAdjacent.ok).toBe(false);
+  });
+
+  it("rejects actions from a player whose turn it is not", () => {
+    const st = toAttack(game());
+    const other = st.players.find((p) => p.id !== st.currentPlayerId)!.id;
+    const bad = reduce(st, { type: "endTurn", playerId: other }, rng);
+    expect(bad.ok).toBe(false);
+  });
 });
 
 describe("createGame options", () => {
