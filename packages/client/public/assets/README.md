@@ -1,6 +1,8 @@
 Arte original, sem referência a produtos Grow/Hasbro.
 
-- `world-board-v2.jpg` — terra/mar pintados 1536×1024 (arte original, recorte compacto). As 42 peças em `layout.ts` assentam nas caixas dos continentes. `world-board.jpg` é o recorte anterior.
+- `world-board-v3.jpg` — terra/mar regradados 1536×1024 (pergaminho + mar-tinta). `world-board-v2.jpg`/`world-board.jpg` são recortes anteriores.
+- `masks/<territory>.png` — região por território (polígono ∩ terra pintada), alpha tintable — o board desenha cada território como sprite tingido por continente+dono. Geradas por `scripts/build-territory-masks.py`.
+- `territory-lines.png` — contornos das regiões (fronteiras seguindo a costa), overlay único acima dos fills.
 - `world-relief.jpg` — relevo anterior (arquivo legado).
 - `card-circle.png` / `card-triangle.png` / `card-square.png` — emblemas de carta em latão
 - `card-joker.png` — emblema de coringa em latão

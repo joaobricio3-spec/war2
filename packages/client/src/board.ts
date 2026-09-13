@@ -39,7 +39,8 @@ function mixRgb(a: number, b: number, t: number): number {
 }
 
 type Cell = {
-  glow: Graphics;
+  fill: Sprite;
+  halo: Sprite;
   name: Text;
   disc: Graphics;
   count: Text;
@@ -63,6 +64,13 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   host.appendChild(app.canvas);
 
   const mapTex = await Assets.load<Texture>("/assets/world-board-v3.jpg");
+  const lineTex = await Assets.load<Texture>("/assets/territory-lines.png");
+  const maskTex = new Map<TerritoryId, Texture>();
+  await Promise.all(
+    LAYOUT.map(async (l) => {
+      maskTex.set(l.id, await Assets.load<Texture>(`/assets/masks/${l.id}.png`));
+    }),
+  );
 
   const world = new Container();
   app.stage.addChild(world);
@@ -77,6 +85,11 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     hooks.onEmpty?.();
   });
   world.addChild(relief);
+
+  // Arcade board: fills são sprites das máscaras de região (polígono ∩ terra
+  // pintada), tingidos por continente+dono — a área colorida segue a costa.
+  const fillLayer = new Container();
+  world.addChild(fillLayer);
 
   const lanes = new Graphics();
   world.addChild(lanes);
@@ -101,6 +114,16 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   }
   lanes.stroke({ width: 2, color: 0xc4a35a, alpha: 0.55 });
 
+  // Baked region outlines (coast-accurate) over fills, under markers.
+  const linesSprite = new Sprite(lineTex);
+  linesSprite.width = WORLD.width;
+  linesSprite.height = WORLD.height;
+  linesSprite.eventMode = "none";
+  world.addChild(linesSprite);
+
+  const markLayer = new Container();
+  world.addChild(markLayer);
+
   const cells = new Map<TerritoryId, Cell>();
   let panned = false;
   let baseX = 0;
@@ -117,20 +140,31 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   };
 
   for (const l of LAYOUT) {
-    const cell = new Container();
-    cell.eventMode = "static";
-    cell.cursor = "pointer";
-    cell.hitArea = {
+    const tex = maskTex.get(l.id)!;
+
+    // Halo: mesma região levemente expandida — rim glow em seleção/alvo.
+    const halo = new Sprite(tex);
+    halo.width = WORLD.width;
+    halo.height = WORLD.height;
+    halo.alpha = 0;
+    halo.eventMode = "none";
+
+    const fill = new Sprite(tex);
+    fill.width = WORLD.width;
+    fill.height = WORLD.height;
+    fill.eventMode = "static";
+    fill.cursor = "pointer";
+    fill.hitArea = {
       contains(x: number, y: number) {
         return pointInPoly(x, y, l.poly);
       },
     };
-    cell.on("pointertap", () => {
+    fill.on("pointertap", () => {
       if (panned) return;
       hooks.onTerritory(l.id);
     });
+    fillLayer.addChild(halo, fill);
 
-    const glow = new Graphics();
     const name = new Text({
       text: TERRITORY_BY_ID[l.id].name,
       style: {
@@ -144,9 +178,11 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     });
     name.anchor.set(0.5, 1);
     name.position.set(l.cx, l.cy - 20);
-    name.alpha = 0.72;
+    name.alpha = 0.78;
+    name.eventMode = "none";
 
     const disc = new Graphics();
+    disc.eventMode = "none";
     const count = new Text({
       text: "1",
       style: {
@@ -158,10 +194,10 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
     });
     count.anchor.set(0.5);
     count.position.set(l.cx, l.cy);
+    count.eventMode = "none";
 
-    cell.addChild(glow, name, disc, count);
-    world.addChild(cell);
-    cells.set(l.id, { glow, name, disc, count });
+    markLayer.addChild(name, disc, count);
+    cells.set(l.id, { fill, halo, name, disc, count });
   }
 
   let fitScale = 1;
@@ -334,30 +370,36 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
       const owner = state.players.find((p) => p.id === occ.ownerId);
       const color = CHIP[owner?.color ?? "white"] ?? 0x888888;
       const land = LAND[TERRITORY_BY_ID[l.id].continent] ?? color;
-      const fill = mixRgb(land, color, 0.55);
+      const fill = mixRgb(land, color, 0.6);
       const cell = cells.get(l.id)!;
       const on = selected === l.id;
       const target = highlights?.has(l.id) ?? false;
 
-      cell.glow.clear();
-      cell.glow.poly(l.poly);
-      cell.glow.fill({ color: fill, alpha: on ? 0.5 : target ? 0.38 : 0.16 });
-      cell.glow.poly(l.poly);
-      cell.glow.stroke({
-        // Selected origin is warm gold; legal destinations are cool cyan so
-        // "o que é origem" e "para onde posso ir" não se confundem. O traço
-        // de repouso é quase invisível — a costa pintada já lê o território.
-        width: on ? 3 : target ? 2.5 : 1.1,
-        color: on ? 0xffd76a : target ? 0x6ec6ff : 0x1c140c,
-        alpha: on || target ? 0.95 : 0.34,
-      });
+      // Fill sprite: região costa-acurada tingida continente+dono.
+      cell.fill.tint = fill;
+      cell.fill.alpha = on ? 0.88 : target ? 0.8 : 0.66;
+
+      // Halo: rim glow por expansão da mesma máscara em torno da âncora.
+      if (on || target) {
+        const s = on ? 1.045 : 1.03;
+        cell.halo.scale.set(s);
+        cell.halo.position.set(l.cx * (1 - s), l.cy * (1 - s));
+        cell.halo.tint = on ? 0xffd76a : 0x6ec6ff;
+        cell.halo.alpha = on ? 0.9 : 0.75;
+      } else {
+        cell.halo.alpha = 0;
+      }
 
       cell.disc.clear();
       cell.disc.circle(l.cx, l.cy, 15);
       cell.disc.fill({ color: 0x090b0e, alpha: 0.92 });
-      cell.disc.stroke({ width: 2.5, color, alpha: 1 });
+      cell.disc.stroke({
+        width: on || target ? 3 : 2.5,
+        color: on ? 0xffd76a : target ? 0x6ec6ff : color,
+        alpha: 1,
+      });
       cell.count.text = String(occ.armies);
-      cell.name.alpha = on || target ? 1 : 0.62;
+      cell.name.alpha = on || target ? 1 : 0.78;
     }
   }
 

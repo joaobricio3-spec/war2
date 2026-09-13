@@ -21,3 +21,5 @@ worktrees
 tools/mcp-imagine/out/
 tools/overlay-*.png
 tools/crop-*.png
+tools/arcade-*.png
+tools/landmask.png
