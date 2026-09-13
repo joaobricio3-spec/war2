@@ -5,7 +5,7 @@ import {
   type PlayerId,
   type TerritoryId,
 } from "@war2/engine";
-import { LAYOUT, LAYOUT_BY_ID, SEA_LANES, WORLD } from "./layout.ts";
+import { LAYOUT, LAYOUT_BY_ID, WORLD } from "./layout.ts";
 
 const CHIP: Record<string, number> = {
   red: 0xc45c4a,
@@ -63,8 +63,12 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   app.ticker.maxFPS = 0;
   host.appendChild(app.canvas);
 
-  const mapTex = await Assets.load<Texture>("/assets/world-board-v3.jpg");
+  const mapTex = await Assets.load<Texture>("/assets/world-board-arcade.png");
   const lineTex = await Assets.load<Texture>("/assets/territory-lines.png");
+  const lanes = (await (await fetch("/assets/visual-lanes.json")).json()) as [
+    TerritoryId,
+    TerritoryId,
+  ][];
   const maskTex = new Map<TerritoryId, Texture>();
   await Promise.all(
     LAYOUT.map(async (l) => {
@@ -114,9 +118,9 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
   const fillLayer = new Container();
   world.addChild(fillLayer);
 
-  const lanes = new Graphics();
-  world.addChild(lanes);
-  for (const [a, b] of SEA_LANES) {
+  const lanesG = new Graphics();
+  world.addChild(lanesG);
+  for (const [a, b] of lanes) {
     const pa = LAYOUT_BY_ID[a];
     const pb = LAYOUT_BY_ID[b];
     if (Math.abs(pb.cx - pa.cx) > WORLD.width / 2) {
@@ -124,18 +128,24 @@ export async function createBoard(host: HTMLElement, hooks: BoardHooks) {
       // stubs toward each edge instead of a line across the whole board.
       const left = pa.cx < pb.cx ? pa : pb;
       const right = pa.cx < pb.cx ? pb : pa;
-      lanes.moveTo(left.cx, left.cy);
-      lanes.quadraticCurveTo(left.cx - 60, left.cy - 10, -14, left.cy - 22);
-      lanes.moveTo(right.cx, right.cy);
-      lanes.quadraticCurveTo(right.cx + 60, right.cy - 10, WORLD.width + 14, right.cy - 22);
+      lanesG.moveTo(left.cx, left.cy);
+      lanesG.quadraticCurveTo(left.cx - 60, left.cy - 10, -14, left.cy - 22);
+      lanesG.moveTo(right.cx, right.cy);
+      lanesG.quadraticCurveTo(right.cx + 60, right.cy - 10, WORLD.width + 14, right.cy - 22);
     } else {
-      const mx = (pa.cx + pb.cx) / 2;
-      const my = (pa.cy + pb.cy) / 2 - 36;
-      lanes.moveTo(pa.cx, pa.cy);
-      lanes.quadraticCurveTo(mx, my, pb.cx, pb.cy);
+      // Arco dobrando na perpendicular do link — não atravessa território
+      // alheio em linha reta nem sobe sempre na mesma direção.
+      const dx = pb.cx - pa.cx;
+      const dy = pb.cy - pa.cy;
+      const len = Math.hypot(dx, dy) || 1;
+      const k = Math.min(64, len * 0.18);
+      const mx = (pa.cx + pb.cx) / 2 - (dy / len) * k;
+      const my = (pa.cy + pb.cy) / 2 + (dx / len) * k;
+      lanesG.moveTo(pa.cx, pa.cy);
+      lanesG.quadraticCurveTo(mx, my, pb.cx, pb.cy);
     }
   }
-  lanes.stroke({ width: 2, color: 0xc4a35a, alpha: 0.55 });
+  lanesG.stroke({ width: 1.7, color: 0xc4a35a, alpha: 0.45 });
 
   // Baked region outlines (coast-accurate) over fills, under markers.
   const linesSprite = new Sprite(lineTex);

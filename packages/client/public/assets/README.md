@@ -1,9 +1,11 @@
 Arte original, sem referência a produtos Grow/Hasbro.
 
-- `world-board-v3.jpg` — terra/mar regradados 1536×1024 (pergaminho + mar-tinta). `world-board-v2.jpg`/`world-board.jpg` são recortes anteriores.
-- `masks/<territory>.png` — região por território (Voronoi das âncoras ∩ terra pintada), alpha tintable — o board desenha cada território como sprite tingido por continente+dono. Geradas por `scripts/build-territory-masks.py`.
-- `territory-lines.png` — contornos das regiões (fronteiras seguindo a costa), overlay único acima dos fills.
-- `regions-index.png` — mapa de índice (R = índice do território na ordem do `LAYOUT`, 0 = mar/neutro) — hit-test de clique, idêntico às regiões visíveis.
+- `world-board-arcade.png` — fundo gerado proceduralmente (mar tinta + grão + vinheta + graticule, terra pergaminho neutra). `world-board-v*.jpg`/`world-relief.jpg` são arte anterior.
+- `masks/<territory>.png` — região por território (fronteira dos polys ∩ silhueta do continente), alpha tintable — o board desenha cada território como sprite tingido por continente+dono.
+- `territory-lines.png` — contornos das regiões (fronteiras + costas), overlay único acima dos fills.
+- `regions-index.png` — mapa de índice (R = índice do território na ordem do `LAYOUT`, 0 = mar) — hit-test de clique idêntico às regiões visíveis.
+- `visual-lanes.json` — pares adjacentes sem fronteira rasterizada (travessias de mar) que o board desenha como rotas.
+- Tudo gerado por `scripts/build-board.py` — rodar de novo após mexer em `layout.ts` ou adjacência.
 - `world-relief.jpg` — relevo anterior (arquivo legado).
 - `card-circle.png` / `card-triangle.png` / `card-square.png` — emblemas de carta em latão
 - `card-joker.png` — emblema de coringa em latão
