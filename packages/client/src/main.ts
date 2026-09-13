@@ -122,11 +122,48 @@ function loadCampaign(): SavedCampaign | null {
     if (!s.players.some((p) => p.id === d.humanId)) return null;
     // Turn must belong to a live player, or the AI loop waits forever.
     if (!s.players.some((p) => p.id === s.currentPlayerId && p.alive)) return null;
-    // Territory map must be exactly the 42 canonical ids.
+    // Territory map must be exactly the 42 canonical ids, with sane values —
+    // a null entry passes the key check then crashes board.render.
     const tids = Object.keys(s.territories ?? {});
     if (tids.length !== 42 || !tids.every((id) => Object.hasOwn(TERRITORY_BY_ID, id)))
       return null;
+    for (const id of tids) {
+      const t = (s.territories as Record<string, { ownerId?: unknown; armies?: unknown }>)[id];
+      if (
+        !t ||
+        typeof t.ownerId !== "string" ||
+        !Number.isInteger(t.armies) ||
+        (t.armies as number) < 1 ||
+        !s.players.some((p) => p.id === t.ownerId)
+      )
+        return null;
+    }
     if (!PHASES.has(s.phase)) return null;
+    // Ordem de turnos e pools de reforço — sem eles reduce/paint quebram.
+    if (
+      !Array.isArray(s.playerOrder) ||
+      s.playerOrder.length !== s.players.length ||
+      !s.players.every((p) => s.playerOrder.includes(p.id))
+    )
+      return null;
+    const atp = s.armiesToPlace;
+    if (
+      !atp ||
+      typeof atp !== "object" ||
+      !Number.isInteger(atp.general) ||
+      atp.general < 0 ||
+      typeof atp.byTerritory !== "object" ||
+      atp.byTerritory === null ||
+      typeof atp.byContinent !== "object" ||
+      atp.byContinent === null
+    )
+      return null;
+    if (!Array.isArray(s.deck) || !Array.isArray(s.discard)) return null;
+    for (const p of s.players) {
+      if (typeof p.alive !== "boolean" || !Array.isArray(p.cards) || p.objective == null)
+        return null;
+      if (p.setupRemaining !== undefined && !Number.isInteger(p.setupRemaining)) return null;
+    }
     // pendingOccupy: valid ids and a non-empty [min,max] window, else the
     // occupy panel renders zero buttons and everything else is blocked.
     const po = s.pendingOccupy;
@@ -141,6 +178,10 @@ function loadCampaign(): SavedCampaign | null {
         po.minArmies > po.maxArmies
       )
         return null;
+      // A origem precisa poder ceder minArmies — senão nenhum occupy é legal
+      // e o jogo trava num pendingOccupy insolúvel.
+      const origin = (s.territories as Record<string, { armies: number }>)[po.from];
+      if (!origin || origin.armies - 1 < po.minArmies) return null;
     }
     // Every non-human player needs an AI entry, or maybeRunAI parks on them.
     const aiIds = new Set(Array.isArray(d.ai) ? d.ai.map(([id]) => id) : []);
@@ -158,6 +199,8 @@ function log(line: string) {
   const p = document.createElement("p");
   p.textContent = line;
   ui.log.prepend(p);
+  // Cap o DOM — uma campanha longa geraria milhares de nós no diário.
+  while (ui.log.childElementCount > 200) ui.log.lastElementChild?.remove();
 }
 
 function tName(id: TerritoryId): string {
@@ -369,9 +412,12 @@ function showChooser(opts: ChooserOpts) {
       });
       ui.chooserBtns.append(b);
     }
-    ui.chooserN.parentElement!.hidden = true;
+    // Só o input/OK somem — Cancelar fica visível para quem usa mouse.
+    ui.chooserN.hidden = true;
+    ui.chooserOk.hidden = true;
   } else {
-    ui.chooserN.parentElement!.hidden = false;
+    ui.chooserN.hidden = false;
+    ui.chooserOk.hidden = false;
   }
 }
 
@@ -449,9 +495,17 @@ function updateDice() {
 
   const myTurn0 = (s: GameState, me: PlayerId) => s.currentPlayerId === me;
 
+  let lastPhase: GameState["phase"] | null = null;
+  let lastCurrent: PlayerId | null = null;
+
   function paint() {
     const s = state;
     if (!s) return;
+    // Seleção não atravessa turno/fase — um clique a mais na vez seguinte não
+    // deve despejar o pool num território escolhido sem querer antes.
+    if (s.phase !== lastPhase || s.currentPlayerId !== lastCurrent) selected = null;
+    lastPhase = s.phase;
+    lastCurrent = s.currentPlayerId;
     const me =
       mode === "net"
         ? netId || s.currentPlayerId
@@ -468,7 +522,8 @@ function updateDice() {
     const poolOwner = myTurn0(s, me) ? "" : ` (de ${cur?.nickname ?? s.currentPlayerId})`;
     ui.pending.textContent =
       s.phase === "setup_place"
-        ? `setup: restam ${p?.setupRemaining ?? 0} tropas${poolOwner}`
+        ? // Na vez dos outros o número exibido é o deles, não o do viewer.
+          `setup: restam ${(myTurn0(s, me) ? p : cur)?.setupRemaining ?? 0} tropas${poolOwner}`
         : `pendentes${poolOwner}: ${pool} | troca obrigatória: ${s.mustTrade ? "sim" : "não"}`;
 
     ui.status.hidden = false;
@@ -507,6 +562,14 @@ function updateDice() {
         (el) => (el as HTMLElement).dataset.card,
       ),
     );
+    // Na troca obrigatória, o engine já enumera os trios legais — acende quais
+    // cartas participam de algum para não virar tentativa e erro.
+    const tradeable = new Set<string>();
+    if (s.mustTrade && s.currentPlayerId === me) {
+      for (const a of listLegalActions(s, me)) {
+        if (a.type === "trade") for (const id of a.cardIds) tradeable.add(id);
+      }
+    }
     ui.cards.innerHTML = "";
     ui.cardsEmpty.hidden = mineCards.length > 0;
     for (const c of mineCards) {
@@ -514,6 +577,7 @@ function updateDice() {
       b.type = "button";
       b.dataset.card = c.id;
       if (picked.has(c.id)) b.classList.add("on");
+      if (tradeable.size > 0) b.classList.toggle("tradeable", tradeable.has(c.id));
       const image = document.createElement("img");
       image.src = `/assets/card-${c.shape}.png`;
       image.alt = "";
@@ -625,15 +689,22 @@ function updateDice() {
 
   function applyLocal(action: Action): boolean {
     if (!state) return false;
-    const r = reduce(state, action, rng);
-    if (!r.ok) {
-      showError(r.error);
+    try {
+      const r = reduce(state, action, rng);
+      if (!r.ok) {
+        showError(r.error);
+        return false;
+      }
+      ui.error.textContent = "";
+      state = r.state;
+      if (mode === "campaign") saveCampaign();
+      return true;
+    } catch {
+      // Estado corrompido que passou pela validação do save — vira toast em
+      // vez de exceção que mata todos os handlers de clique.
+      showError("estado inválido — ação rejeitada");
       return false;
     }
-    ui.error.textContent = "";
-    state = r.state;
-    if (mode === "campaign") saveCampaign();
-    return true;
   }
 
   function dispatch(action: Action) {
@@ -1042,8 +1113,15 @@ function updateDice() {
 
   function connect(url: string, send: C2S) {
     const previous = ws;
-    ws = new WebSocket(url);
-    const sock = ws;
+    let sock: WebSocket;
+    try {
+      sock = new WebSocket(url);
+    } catch {
+      // URL malformada: sem toast isso era um clique morto silencioso.
+      showError("URL de WebSocket inválida");
+      return;
+    }
+    ws = sock;
     sock.addEventListener("open", () => {
       if (ws !== sock) return;
       sock.send(JSON.stringify(send));
@@ -1051,7 +1129,7 @@ function updateDice() {
     sock.addEventListener("close", () => {
       if (ws !== sock) return;
       if (mode === "net") {
-        ui.error.textContent = "conexão perdida — reconectando";
+        showError("conexão perdida — reconectando");
         window.setTimeout(() => {
           if (mode !== "net" || ws !== sock) return;
           tryReconnect();
@@ -1071,6 +1149,12 @@ function updateDice() {
         if (/reconnect/i.test(msg.message)) {
           sessionStorage.removeItem("war2");
           token = "";
+          roomCode = "";
+          netPlayers = [];
+          // Não deixa "Voltar ao jogo" reabrir um tabuleiro de sala morta.
+          state = null;
+          selected = null;
+          if (ui.overlay.hidden) goToTitle();
         }
         return;
       }
@@ -1086,6 +1170,8 @@ function updateDice() {
         netPlayers = msg.players;
         mode = "net";
         state = msg.state;
+        hideChooser();
+        selected = null; // re-sync — autopilot pode ter jogado na nossa ausência
         ui.error.textContent = "";
         sessionStorage.setItem("war2", JSON.stringify({ token, roomCode, url }));
         log(`sala ${roomCode}`);
@@ -1104,13 +1190,16 @@ function updateDice() {
         netHost = msg.host;
         netPlayers = msg.players;
         if (msg.state) {
+          // Só fecha overlays quando uma partida NOVA chega (lobby→jogo ou
+          // rematch após over) — broadcast mid-game não pode derrubar o menu.
+          const fresh = !state || state.phase === "over";
           state = msg.state;
           ui.error.textContent = "";
           // Sem hideChooser: broadcasts de roster (reconnect de terceiros)
           // não devem cancelar uma decisão de ataque em curso.
           if (msg.state.phase === "over") onGameOver();
           else {
-            hideOverlays();
+            if (fresh) hideOverlays();
             paint();
           }
         } else {
@@ -1119,6 +1208,9 @@ function updateDice() {
         return;
       }
       if (msg.type === "state") {
+        // Idem: partida nova puxa o jogador para o tabuleiro; progresso
+        // mid-game respeita o Título aberto.
+        const fresh = !state || state.phase === "over";
         state = msg.state;
         ui.error.textContent = "";
         hideChooser();
@@ -1127,7 +1219,7 @@ function updateDice() {
           onGameOver();
           return;
         }
-        hideOverlays();
+        if (fresh) hideOverlays();
         paint();
       }
     });
@@ -1169,7 +1261,7 @@ function updateDice() {
 
   document.querySelector("#startnet")?.addEventListener("click", () => {
     if (ws?.readyState !== WebSocket.OPEN) {
-      ui.error.textContent = "sem conexão";
+      showError("sem conexão");
       return;
     }
     ws.send(JSON.stringify({ type: "start" } satisfies C2S));
@@ -1179,6 +1271,10 @@ function updateDice() {
   if (saved) {
     try {
       const s = JSON.parse(saved) as { token: string; roomCode: string; url: string };
+      // Popular token/roomCode ANTES do connect — se o primeiro socket cair
+      // sem welcome, o tryReconnect depende deles para tentar de novo.
+      token = s.token;
+      roomCode = s.roomCode;
       mode = "net";
       connect(s.url, { type: "reconnect", roomCode: s.roomCode, token: s.token });
     } catch {

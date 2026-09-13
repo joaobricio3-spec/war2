@@ -137,6 +137,12 @@ dd {
   color: var(--ink);
 }
 
+/* mustTrade: cartas que participam de algum trio legal. */
+.cards button.tradeable {
+  border-color: #6ec6ff;
+  box-shadow: 0 0 0 1px #6ec6ff inset;
+}
+
 .row {
   display: flex;
   flex-wrap: wrap;
