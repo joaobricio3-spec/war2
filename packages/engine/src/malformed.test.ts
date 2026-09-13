@@ -181,7 +181,7 @@ describe("malformed actions", () => {
     st.phase = "fortify";
     const me = st.currentPlayerId;
     const [from, to] = TERRITORY_IDS.filter((id) => st.territories[id].ownerId === me);
-    const origin = st.territories[from].armies;
+    const origin = st.territories[from!].armies;
     const empty = reduce(
       st,
       { type: "fortify", playerId: me, from: from!, to: to!, armies: origin } as Action,
