@@ -203,6 +203,21 @@ function log(line: string) {
   while (ui.log.childElementCount > 200) ui.log.lastElementChild?.remove();
 }
 
+/** Loga transições vivo→morto com o autor do golpe, se houver. */
+function diffLog(prev: GameState, next: GameState) {
+  for (const p of next.players) {
+    const was = prev.players.find((q) => q.id === p.id);
+    if (was?.alive && !p.alive) {
+      const killer = next.players.find((q) => q.id === p.killedBy);
+      log(
+        killer
+          ? `${killer.nickname} eliminou ${p.nickname}`
+          : `${p.nickname} foi eliminado`,
+      );
+    }
+  }
+}
+
 function tName(id: TerritoryId): string {
   return TERRITORY_BY_ID[id]?.name ?? id;
 }
@@ -708,6 +723,14 @@ function updateDice() {
     }
   }
 
+  /** Ponto único de aplicação de estado — loga eliminações (vivo→morto). */
+  function commitState(next: GameState | null) {
+    const prev = state;
+    state = next;
+    if (prev && next) diffLog(prev, next);
+    if (mode === "campaign") saveCampaign();
+  }
+
   function applyLocal(action: Action): boolean {
     if (!state) return false;
     try {
@@ -717,8 +740,7 @@ function updateDice() {
         return false;
       }
       ui.error.textContent = "";
-      state = r.state;
-      if (mode === "campaign") saveCampaign();
+      commitState(r.state);
       return true;
     } catch {
       // Estado corrompido que passou pela validação do save — vira toast em
@@ -793,8 +815,7 @@ function updateDice() {
       for (const a of listLegalActions(state, pid)) {
         const r = reduce(state, a, rng);
         if (r.ok) {
-          state = r.state;
-          saveCampaign();
+          commitState(r.state);
           return true;
         }
       }
@@ -846,8 +867,7 @@ function updateDice() {
     } else {
       const r = reduce(state, action, rng);
       if (r.ok) {
-        state = r.state;
-        saveCampaign();
+        commitState(r.state);
         log(`${nick}: ${describeAction(action)}`);
       } else {
         halted = !aiFallback(pid);
@@ -1218,7 +1238,7 @@ function updateDice() {
         netHost = msg.host;
         netPlayers = msg.players;
         mode = "net";
-        state = msg.state;
+        commitState(msg.state);
         hideChooser();
         selected = null; // re-sync — autopilot pode ter jogado na nossa ausência
         ui.error.textContent = "";
@@ -1242,7 +1262,7 @@ function updateDice() {
           // Só fecha overlays quando uma partida NOVA chega (lobby→jogo ou
           // rematch após over) — broadcast mid-game não pode derrubar o menu.
           const fresh = !state || state.phase === "over";
-          state = msg.state;
+          commitState(msg.state);
           ui.error.textContent = "";
           // Sem hideChooser: broadcasts de roster (reconnect de terceiros)
           // não devem cancelar uma decisão de ataque em curso.
@@ -1260,11 +1280,11 @@ function updateDice() {
         // Idem: partida nova puxa o jogador para o tabuleiro; progresso
         // mid-game respeita o Título aberto.
         const fresh = !state || state.phase === "over";
-        state = msg.state;
+        commitState(msg.state);
         ui.error.textContent = "";
         hideChooser();
         selected = null; // seleção pode apontar p/ território que mudou de dono
-        if (state.phase === "over") {
+        if (msg.state.phase === "over") {
           onGameOver();
           return;
         }
