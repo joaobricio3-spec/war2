@@ -32,7 +32,7 @@ engine ganha"), mantemos **defesa `min(3, tropas_destino)`** e documentamos aqui
 
 Sem `GATE_OK=1` no output do turno, o goal **não** está cumprido.
 
-- [x] `npm test` exit 0 — `package.json:12` (57 engine + 2 server neste turno)
+- [x] `pnpm test` exit 0 — 66 engine + 5 client + 7 server (inclui gauntlet E2E de partida completa entre dois sockets, ~1s)
 - [x] `npm run typecheck` exit 0 — `package.json:13`
 - [x] `npm run build` exit 0 — `package.json:14`
 - [x] `npm run gate` imprime `GATE_OK=1` — `scripts/war-gate.mjs:81`
