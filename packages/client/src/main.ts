@@ -264,6 +264,27 @@ async function main() {
           return;
         }
         const from = selected;
+        // Território próprio conectado = fortify dentro da fase de ataque.
+        if (state.territories[id].ownerId === me) {
+          const movable = state.territories[from].armies - 1;
+          if (movable < 1) return;
+          if (movable === 1) {
+            dispatch({ type: "fortify", playerId: me, from, to: id, armies: 1 });
+            selected = null;
+            paint();
+            return;
+          }
+          showChooser({
+            hint: `Deslocar de ${tName(from)} → ${tName(id)}: quantos? (1 a ${movable})`,
+            min: 1,
+            max: movable,
+            onPick: (n) =>
+              dispatch({ type: "fortify", playerId: me, from, to: id, armies: n }),
+          });
+          selected = null;
+          paint();
+          return;
+        }
         const maxDice = Math.min(3, state.territories[from].armies - 1);
         if (maxDice < 1) return;
         if (maxDice === 1) {
@@ -404,16 +425,22 @@ function updateDice() {
       return out;
     }
     if (s.phase !== "attack" && s.phase !== "fortify") return out;
-    const kind = s.phase === "attack" ? "attack" : "fortify";
-    const legal = listLegalActions(s, me).filter((a) => a.type === kind);
+    const legal = listLegalActions(s, me);
+    const kinds =
+      s.phase === "attack"
+        ? // Na fase de ataque o engine também permite fortify — clique em
+          // território próprio conectado desloca e encerra o ataque.
+          (a: Action) => a.type === "attack" || a.type === "fortify"
+        : (a: Action) => a.type === "fortify";
+    const moves = legal.filter(kinds);
     if (selected) {
       // destinations reachable from the selected origin
-      for (const a of legal) {
+      for (const a of moves) {
         if ((a.type === "attack" || a.type === "fortify") && a.from === selected) out.add(a.to);
       }
     } else {
       // nothing selected yet: light up the valid origins so the move is findable
-      for (const a of legal) {
+      for (const a of moves) {
         if (a.type === "attack" || a.type === "fortify") out.add(a.from);
       }
     }
