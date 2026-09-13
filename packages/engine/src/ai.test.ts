@@ -117,4 +117,122 @@ describe("AI", () => {
       expect(marechal.to).toBe("venezuela");
     }
   });
+
+  it("prefers completing a continent over a bigger raw-advantage attack", () => {
+    // brasil→venezuela closes América do Sul (adv 8 + bônus) e deve vencer
+    // argelia→egito (adv 11 sem bônus).
+    const s = cloneState(newGame(["oficial", "oficial"], 2));
+    s.phase = "attack";
+    s.currentPlayerId = "p1";
+    s.pendingOccupy = null;
+    s.mustTrade = false;
+    for (const id of TERRITORY_IDS) s.territories[id] = { ownerId: "p2", armies: 99 };
+    s.territories.argentina = { ownerId: "p1", armies: 3 };
+    s.territories.bolivia = { ownerId: "p1", armies: 3 };
+    s.territories.brasil = { ownerId: "p1", armies: 10 };
+    s.territories.argelia = { ownerId: "p1", armies: 20 };
+    s.territories.venezuela = { ownerId: "p2", armies: 2 };
+    s.territories.egito = { ownerId: "p2", armies: 9 };
+
+    const a = aiChooseAction(s, "p1", "oficial");
+    expect(a?.type).toBe("attack");
+    if (a?.type === "attack") {
+      expect(a.from).toBe("brasil");
+      expect(a.to).toBe("venezuela");
+    }
+  });
+
+  it("refuses a parity fight against a 3-army defender", () => {
+    // Almofada de paridade: 4v3 (adv 1, defensor ≥3) sangra sem ganho —
+    // oficial exige adv ≥2 e termina o turno; 4v2 ele ataca.
+    const s = cloneState(newGame(["oficial", "oficial"], 2));
+    s.phase = "attack";
+    s.currentPlayerId = "p1";
+    s.pendingOccupy = null;
+    s.mustTrade = false;
+    for (const id of TERRITORY_IDS) s.territories[id] = { ownerId: "p2", armies: 99 };
+    s.territories.brasil = { ownerId: "p1", armies: 4 };
+    s.territories.venezuela = { ownerId: "p2", armies: 3 };
+    expect(aiChooseAction(s, "p1", "oficial")?.type).toBe("endTurn");
+
+    s.territories.venezuela = { ownerId: "p2", armies: 2 };
+    const a = aiChooseAction(s, "p1", "oficial");
+    expect(a?.type).toBe("attack");
+  });
+
+  it("recruta fortifies an interior surplus into the most undermanned border", () => {
+    // Sem ataque viável (fronteiras 30/99), o excedente de argentina deve
+    // alcançar venezuela — a fronteira mais descoberta — via multi-hop.
+    const s = cloneState(newGame(["recruta", "oficial", "marechal"], 3));
+    s.phase = "attack";
+    s.currentPlayerId = "p1";
+    s.pendingOccupy = null;
+    s.mustTrade = false;
+    for (const id of TERRITORY_IDS) s.territories[id] = { ownerId: "p2", armies: 99 };
+    s.territories.argentina = { ownerId: "p1", armies: 8 };
+    s.territories.bolivia = { ownerId: "p1", armies: 2 };
+    s.territories.brasil = { ownerId: "p1", armies: 8 };
+    s.territories.venezuela = { ownerId: "p1", armies: 2 };
+    s.territories.argelia = { ownerId: "p2", armies: 30 };
+    s.territories.mexico = { ownerId: "p2", armies: 30 };
+
+    for (const diff of ["recruta", "oficial", "marechal"] as const) {
+      const a = aiChooseAction(s, "p1", diff);
+      expect(a?.type).toBe("fortify");
+      if (a?.type === "fortify") {
+        expect(a.to).toBe("venezuela");
+        expect(a.armies).toBeGreaterThan(1);
+      }
+    }
+  });
+
+  it("occupies with the minimum into interior conquests, max for marechal", () => {
+    // Conquista para o interior não pede exércitos: recruta/oficial movem o
+    // mínimo e preservam a guarnição de origem; marechal segue lançando tudo.
+    const s = cloneState(newGame(["recruta", "marechal"], 2));
+    s.phase = "attack";
+    s.currentPlayerId = "p1";
+    s.mustTrade = false;
+    for (const id of TERRITORY_IDS) s.territories[id] = { ownerId: "p2", armies: 99 };
+    s.territories.argentina = { ownerId: "p1", armies: 1 };
+    s.territories.bolivia = { ownerId: "p1", armies: 1 };
+    s.territories.brasil = { ownerId: "p1", armies: 6 };
+    s.territories.venezuela = { ownerId: "p1", armies: 1 };
+    s.pendingOccupy = { from: "brasil", to: "argentina", minArmies: 1, maxArmies: 5 };
+
+    const recruta = aiChooseAction(s, "p1", "recruta");
+    expect(recruta?.type).toBe("occupy");
+    if (recruta?.type === "occupy") expect(recruta.armies).toBe(1);
+
+    const marechal = aiChooseAction(s, "p1", "marechal");
+    expect(marechal?.type).toBe("occupy");
+    if (marechal?.type === "occupy") expect(marechal.armies).toBe(5);
+  });
+
+  it("trades the triple that owns the most territory cards", () => {
+    // Entre {c1,c2,c3} (2 bônus de território próprio) e {c4,c5,c6} (coringa),
+    // a troca certa maximiza os +2 por território.
+    const s = cloneState(newGame(["oficial", "oficial"], 2));
+    s.phase = "reinforce";
+    s.currentPlayerId = "p1";
+    s.pendingOccupy = null;
+    s.mustTrade = true;
+    for (const id of TERRITORY_IDS) s.territories[id] = { ownerId: "p2", armies: 99 };
+    s.territories.brasil = { ownerId: "p1", armies: 3 };
+    s.territories.venezuela = { ownerId: "p1", armies: 3 };
+    s.players[0]!.cards = [
+      { id: "c1", kind: "territory", territoryId: "brasil", shape: "circle" },
+      { id: "c2", kind: "territory", territoryId: "venezuela", shape: "circle" },
+      { id: "c3", kind: "territory", territoryId: "argelia", shape: "circle" },
+      { id: "c4", kind: "territory", territoryId: "egito", shape: "triangle" },
+      { id: "c5", kind: "territory", territoryId: "congo", shape: "square" },
+      { id: "c6", kind: "joker", shape: "joker" },
+    ];
+
+    const a = aiChooseAction(s, "p1", "oficial");
+    expect(a?.type).toBe("trade");
+    if (a?.type === "trade") {
+      expect([...a.cardIds].sort()).toEqual(["c1", "c2", "c3"]);
+    }
+  });
 });
